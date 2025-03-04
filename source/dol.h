@@ -22,4 +22,19 @@
 #ifndef RRC_DOL_H
 #define RRC_DOL_H
 
+#include <gctypes.h>
+
+#define RRC_DOL_SECTION_COUNT 18
+
+struct rrc_dol
+{
+    u32 section[RRC_DOL_SECTION_COUNT];
+    u32 section_addr[RRC_DOL_SECTION_COUNT];
+    u32 section_size[RRC_DOL_SECTION_COUNT];
+
+    u32 bss_addr;
+    u32 bss_size;
+    u32 entry_point;
+};
+
 #endif
