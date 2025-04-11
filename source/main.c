@@ -57,6 +57,16 @@ void *wiisocket_init_thread_callback(void *res)
     return NULL;
 }
 
+s32 custom_convert_path_to_entrynum(const char *filename)
+{
+    // OS_Report("Loading -> %s", filename)
+    ((void (*)(const char *, ...))0x801A25D0)((char *)0x93400100, filename);
+
+    // Return to original overwritten function
+    s32 (*cb)(char *) = (void *)0x93400000;
+    return cb(filename);
+}
+
 int main(int argc, char **argv)
 {
     s64 systime_start = gettime();
@@ -65,7 +75,7 @@ int main(int argc, char **argv)
 
     void *xfb;
     // init video, setup console framebuffer
-    rrc_gui_xfb_alloc(&xfb, false);
+    rrc_gui_xfb_alloc(&xfb, true);
     rrc_gui_display_con(xfb, true);
     rrc_gui_display_banner(xfb);
 
@@ -214,7 +224,7 @@ interrupt_loop_end:
     res = rrc_di_read(dol, sizeof(struct rrc_dol), data_header->dol_offset);
     RRC_ASSERTEQ(res, RRC_DI_LIBDI_OK, "rrc_di_read for dol");
 
-    rrc_dbg_printf("Entrypoint at %x\n", dol->entry_point);
+    SYS_Report("Entrypoint at %x\n", dol->entry_point);
     rrc_dbg_printf("BSS Addr: %x\n", dol->bss_addr);
     rrc_dbg_printf("BSS size: %d\n", dol->bss_size);
     for (u32 i = 0; i < RRC_DOL_SECTION_COUNT; i++)
@@ -223,7 +233,7 @@ interrupt_loop_end:
         {
             continue;
         }
-        rrc_dbg_printf("%x at %x-%x (%d b)\n", dol->section[i], dol->section_addr[i], dol->section_addr[i] + dol->section_size[i], dol->section_size[i]);
+        SYS_Report("%x at %x-%x (%d b)\n", dol->section[i], dol->section_addr[i], dol->section_addr[i] + dol->section_size[i], dol->section_size[i]);
         if ((dol->section_addr[i] < 0x80000000) || (dol->section_addr[i] + dol->section_size[i] > 0x90000000))
         {
             RRC_FATAL("Invalid section address: %x", dol->section_addr[i]);
@@ -235,6 +245,65 @@ interrupt_loop_end:
             dol->section_size[i],
             data_header->dol_offset + (dol->section[i] >> 2));
         RRC_ASSERTEQ(res, RRC_DI_LIBDI_OK, "rrc_di_read section");
+    }
+
+    RRC_ASSERTEQ(dol->section_addr[1], 0x800072c0, "a");
+    RRC_ASSERTEQ(dol->section_addr[1] + dol->section_size[1], 0x80244de0, "b");
+    u32 *v = (u32 *)((u32)dol + dol->section[1] + 2339800);
+    SYS_Report("%x\n", *v);
+    // <memory offset="0x80242698" value="4BDC1968" original="4e800020" />
+    *v = 0x4BDC1968;
+    SYS_Report("%x\n", *v);
+
+    int custom_size = 128;
+    memcpy(
+        (void *)0x93400060,
+        custom_convert_path_to_entrynum, custom_size);
+    DCInvalidateRange((void *)0x93400060, custom_size);
+    ICInvalidateRange((void *)0x93400060, custom_size);
+
+    strcpy((void *)0x93400100, "Loading --> %s\n");
+    DCInvalidateRange((void *)0x93400100, 32);
+
+    u32 target_addr = 0x8015df4c; // 0x8015e2bc;
+
+    for (u32 i = 0; i < RRC_DOL_SECTION_COUNT; i++)
+    {
+        u32 section_addr = dol->section_addr[i];
+        u32 section_size = dol->section_size[i];
+        u32 section_offset = dol->section[i];
+
+        if (target_addr >= section_addr && target_addr <= section_addr + section_size)
+        {
+            u32 addr_section_offset = target_addr - section_addr;
+            u32 *virt_target = (void *)((u32)dol + section_offset + addr_section_offset);
+
+            memcpy((void *)(0x93400000), virt_target, 16);
+            ((u32 *)0x93400010)[0] = 0x3d208015;
+            // ((u32 *)0x93400010)[1] = 0x6129e2cc;
+            ((u32 *)0x93400010)[1] = 0x6129df5c;
+            ((u32 *)0x93400010)[2] = 0x7d2903a6;
+            ((u32 *)0x93400010)[3] = 0x4e800420;
+            DCInvalidateRange((void *)0x93400000, 32);
+            ICInvalidateRange((void *)0x93400000, 32);
+
+            virt_target[0] = 0x3d209340;
+            virt_target[1] = 0x61290060;
+            virt_target[2] = 0x7d2903a6;
+            virt_target[3] = 0x4e800420;
+        }
+    }
+
+    RRC_ASSERTEQ(dol->section_addr[0], 0x80004000, "addr");
+    u8 *pul_dest = (u8 *)((u32)dol + dol->section[0]);
+
+    FILE *loader_pul_file = fopen("RetroRewind6/Binaries/Loader.pul", "r");
+    RRC_ASSERT(loader_pul_file != NULL, "failed to open");
+    int read = 0;
+    while (read = fread(pul_dest, 1, 4096, loader_pul_file))
+    {
+        SYS_Report("Read %d bytes at %p. (%d)\n", read, pul_dest, PATCH_DOL_LEN);
+        pul_dest += read;
     }
 
     rrc_con_update("Initialise DVD: Read Filesystem Table", 50);
@@ -272,6 +341,7 @@ interrupt_loop_end:
     s64 systime_end = gettime();
     rrc_dbg_printf("time taken: %.3f seconds\n", ((f64)diff_msec(systime_start, systime_end)) / 1000.0);
 
+    mem2_hi = 0x93400000;
     rrc_loader_load(dol, bi2, mem1_hi, mem2_hi);
 
     return 0;

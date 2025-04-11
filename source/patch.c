@@ -42,7 +42,7 @@
 #include <stdint.h>
 #include "dol.h"
 
-void patch_dol(struct rrc_dol *dol, void (*dc_flush_range)(void *, u32))
+void patch_dol(struct rrc_dol *dol, void (*dc_flush_range)(void *, u32), void (*ic_invalidate_range)(void *, u32))
 {
     // First, zero BSS.
     u64 *bss8 = (u64 *)dol->bss_addr;
@@ -55,6 +55,7 @@ void patch_dol(struct rrc_dol *dol, void (*dc_flush_range)(void *, u32))
     }
 
     dc_flush_range((void *)dol->bss_addr, dol->bss_size);
+    ic_invalidate_range((void *)dol->bss_addr, dol->bss_size);
 
     // Next, copy all sections to where they need to be.
     for (u8 section_index = 0; section_index < RRC_DOL_SECTION_COUNT; section_index++)
@@ -69,6 +70,7 @@ void patch_dol(struct rrc_dol *dol, void (*dc_flush_range)(void *, u32))
         }
 
         dc_flush_range((void *)to, size);
+        ic_invalidate_range((void *)to, size);
     }
 
     ((void (*)())dol->entry_point)();

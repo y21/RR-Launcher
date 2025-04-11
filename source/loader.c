@@ -166,7 +166,7 @@ void rrc_loader_load(void *dol, void *bi2_dest, u32 mem1_hi, u32 mem2_hi)
     // It also needs to call `DCFlushRange` but cannot reference it in the function, so we copy it and pass it as a function pointer.
     // See patch.c comment for a more detailed explanation.
 
-    void (*patch_copy)(struct rrc_dol *, void (*)(void *, u32)) = (void (*)(struct rrc_dol *, void (*)(void *, u32)))RRC_PATCH_COPY_ADDRESS;
+    void (*patch_copy)(struct rrc_dol *, void (*)(void *, u32), void (*)(void *, u32)) = (void (*)(struct rrc_dol *, void (*)(void *, u32), void (*)(void *, u32)))RRC_PATCH_COPY_ADDRESS;
 
     memcpy(patch_copy, patch_dol, PATCH_DOL_LEN);
     DCFlushRange(patch_copy, PATCH_DOL_LEN);
@@ -176,6 +176,11 @@ void rrc_loader_load(void *dol, void *bi2_dest, u32 mem1_hi, u32 mem2_hi)
     memcpy(flush_range_copy, ICInvalidateRange, 64);
     DCFlushRange(flush_range_copy, 64);
     ICInvalidateRange(flush_range_copy, 64);
+
+    void (*flush_range2_copy)() = (void *)align_up(RRC_PATCH_COPY_ADDRESS + PATCH_DOL_LEN + 64, 32);
+    memcpy(flush_range2_copy, DCInvalidateRange, 64);
+    DCFlushRange(flush_range2_copy, 64);
+    ICInvalidateRange(flush_range2_copy, 64);
 
     __IOS_ShutdownSubsystems();
     for (u32 i = 0; i < 32; i++)
@@ -188,5 +193,5 @@ void rrc_loader_load(void *dol, void *bi2_dest, u32 mem1_hi, u32 mem2_hi)
     // Set the stack pointer to the safe address space so we don't overwrite local variables when copying sections.
     u32 new_sp = 0x808ffa00;
     asm volatile("mr 1, %0" : : "r"(new_sp) : "memory");
-    patch_copy(dol, flush_range_copy);
+    patch_copy(dol, flush_range_copy, flush_range2_copy);
 }
