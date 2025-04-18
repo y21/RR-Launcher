@@ -135,7 +135,8 @@ void rrc_loader_load(void *dol, void *bi2_dest, u32 mem1_hi, u32 mem2_hi)
 
     // Addresses are taken from <https://wiibrew.org/wiki/Memory_map> for the most part.
 
-    *(u32 *)0xCD006C00 = 0x00000000;           // Reset `AI_CONTROL` to fix audio
+    *(u32 *)0xCD006C00 = 0x00000000; // Reset `AI_CONTROL` to fix audio
+    memcpy((u32 *)0x80000000, "RMCP01", 6);
     *(u32 *)0x80000034 = 0;                    // Arena High
     *(u32 *)0x800000EC = 0x81800000;           // Dev Debugger Monitor Address
     *(u32 *)0x800000F0 = 0x01800000;           // Simulated Memory Size
