@@ -69,6 +69,10 @@ s32 custom_convert_path_to_entrynum(const char *filename)
 
 int main(int argc, char **argv)
 {
+    ICDisable();
+    DCDisable();
+    u32 mem1_hi = 0x81740000; // reserved for patch helpers
+
     s64 systime_start = gettime();
     // response codes for various library functions
     int res;
@@ -83,6 +87,46 @@ int main(int argc, char **argv)
     RRC_ASSERTEQ(fatInitDefault(), true, "fatInitDefault()");
     // force filesystem root
     chdir("../../../../..");
+
+    {
+
+        FILE *patch_file = fopen("patch-helpers.dol", "r");
+        RRC_ASSERT(patch_file != NULL, "patch file");
+        struct rrc_dol patch_dol __attribute__((aligned(32)));
+
+        int read = fread((void *)&patch_dol, sizeof(patch_dol), 1, patch_file);
+        SYS_Report("read = %d\n", read);
+
+        for (int i = 0; i < patch_dol.bss_size; i++)
+            *(u8 *)(patch_dol.bss_addr + i) = 0;
+
+        for (int i = 0; i < RRC_DOL_SECTION_COUNT; i++)
+        {
+            u32 sec = patch_dol.section[i];
+            u32 sec_addr = patch_dol.section_addr[i];
+            u32 sec_size = patch_dol.section_size[i];
+            if (sec_addr == 0)
+                continue;
+
+            fseek(patch_file, sec, SEEK_SET);
+            SYS_Report("Section %d at %x with size %d\n", sec, sec_addr, sec_size);
+            read = fread((void *)sec_addr, sec_size, 1, patch_file);
+            DCInvalidateRange((void *)align_down(sec_addr, 32), align_up(sec_size + 32, 32));
+            DCFlushRange((void *)align_down(sec_addr, 32), align_up(sec_size + 32, 32));
+            ICInvalidateRange((void *)align_down(sec_addr, 32), align_up(sec_size + 32, 32));
+            RRC_ASSERTEQ(read, 1, "fully read section");
+            int v = 42;
+            printf("... %x\n", &v);
+        }
+
+        SYS_Report("Entrypoint -> %x\n", patch_dol.entry_point);
+        void (*entry)() = (void *)patch_dol.entry_point;
+        entry();
+
+        usleep(10000000);
+    }
+
+    SYS_Report("testing stuff\n");
 
     rrc_con_update("Initialise controllers", 0);
 
@@ -169,51 +213,51 @@ int main(int argc, char **argv)
     RRC_ASSERTEQ(res, RRC_LWP_OK, "LWP_JoinThread wiisocket init");
     RRC_ASSERTEQ(wiisocket_res, 0, "wiisocket_init");
 
-    struct rrc_settingsfile stored_settings;
-    RRC_ASSERTEQ(rrc_settingsfile_parse(&stored_settings), RRC_SETTINGSFILE_OK, "failed to parse settingsfile");
+    //     struct rrc_settingsfile stored_settings;
+    //     RRC_ASSERTEQ(rrc_settingsfile_parse(&stored_settings), RRC_SETTINGSFILE_OK, "failed to parse settingsfile");
 
-    // Check for updates if the user enabled that setting.
-    if (stored_settings.auto_update)
-    {
-        int update_count;
-        rrc_update_do_updates(xfb, &update_count);
-    }
+    //     // Check for updates if the user enabled that setting.
+    //     if (stored_settings.auto_update)
+    //     {
+    //         int update_count;
+    //         rrc_update_do_updates(xfb, &update_count);
+    //     }
 
-#define INTERRUPT_TIME 3000000 /* 3 seconds */
-    rrc_con_clear(true);
+    // #define INTERRUPT_TIME 3000000 /* 3 seconds */
+    //     rrc_con_clear(true);
 
-    rrc_con_print_text_centered(_RRC_ACTION_ROW, "Press A to launch, or press + to load settings.");
-    rrc_con_print_text_centered(_RRC_ACTION_ROW + 1, "Auto-launching in 3 seconds...");
+    //     rrc_con_print_text_centered(_RRC_ACTION_ROW, "Press A to launch, or press + to load settings.");
+    //     rrc_con_print_text_centered(_RRC_ACTION_ROW + 1, "Auto-launching in 3 seconds...");
 
-    for (int i = 0; i < INTERRUPT_TIME / RRC_WPAD_LOOP_TIMEOUT; i++)
-    {
-        WPAD_ScanPads();
+    //     for (int i = 0; i < INTERRUPT_TIME / RRC_WPAD_LOOP_TIMEOUT; i++)
+    //     {
+    //         WPAD_ScanPads();
 
-        int pressed = WPAD_ButtonsDown(0);
-        if (pressed & RRC_WPAD_HOME_MASK)
-        {
-            return 0;
-        }
+    //         int pressed = WPAD_ButtonsDown(0);
+    //         if (pressed & RRC_WPAD_HOME_MASK)
+    //         {
+    //             return 0;
+    //         }
 
-        if (pressed & RRC_WPAD_A_MASK)
-        {
-            break;
-        }
+    //         if (pressed & RRC_WPAD_A_MASK)
+    //         {
+    //             break;
+    //         }
 
-        if (pressed & RRC_WPAD_PLUS_MASK)
-        {
-            switch (rrc_settings_display(xfb, &stored_settings))
-            {
-            case RRC_SETTINGS_LAUNCH:
-                goto interrupt_loop_end;
-            case RRC_SETTINGS_EXIT:
-                return 0;
-            }
-        }
+    //         if (pressed & RRC_WPAD_PLUS_MASK)
+    //         {
+    //             switch (rrc_settings_display(xfb, &stored_settings))
+    //             {
+    //             case RRC_SETTINGS_LAUNCH:
+    //                 goto interrupt_loop_end;
+    //             case RRC_SETTINGS_EXIT:
+    //                 return 0;
+    //             }
+    //         }
 
-        usleep(RRC_WPAD_LOOP_TIMEOUT);
-    }
-interrupt_loop_end:
+    //         usleep(RRC_WPAD_LOOP_TIMEOUT);
+    //     }
+    // interrupt_loop_end:
 
     rrc_con_clear(true);
 
@@ -308,7 +352,6 @@ interrupt_loop_end:
 
     rrc_con_update("Initialise DVD: Read Filesystem Table", 50);
 
-    u32 mem1_hi = 0x81800000;
     u32 mem2_hi = *(u32 *)0x80003128;
     rrc_dbg_printf("mem1 hi: %x, mem2 hi %x\n", mem1_hi, mem2_hi);
 
