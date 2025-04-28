@@ -44,6 +44,8 @@
 #include "gui.h"
 #include "res.h"
 #include "settingsfile.h"
+#include <setjmp.h>
+#include <ogc/isfs.h>
 
 /* 100ms */
 #define DISKCHECK_DELAY 100000
@@ -57,21 +59,9 @@ void *wiisocket_init_thread_callback(void *res)
     return NULL;
 }
 
-s32 custom_convert_path_to_entrynum(const char *filename)
-{
-    // OS_Report("Loading -> %s", filename)
-    ((void (*)(const char *, ...))0x801A25D0)((char *)0x93400100, filename);
-
-    // Return to original overwritten function
-    s32 (*cb)(char *) = (void *)0x93400000;
-    return cb(filename);
-}
-
 int main(int argc, char **argv)
 {
-    ICDisable();
-    DCDisable();
-    u32 mem1_hi = 0x81740000; // reserved for patch helpers
+    u32 mem1_hi = 0x81000000; // reserved for patch helpers
 
     s64 systime_start = gettime();
     // response codes for various library functions
@@ -100,6 +90,10 @@ int main(int argc, char **argv)
         for (int i = 0; i < patch_dol.bss_size; i++)
             *(u8 *)(patch_dol.bss_addr + i) = 0;
 
+        DCInvalidateRange((void *)patch_dol.bss_addr, align_up(patch_dol.bss_size, 32));
+        DCFlushRange((void *)patch_dol.bss_addr, align_up(patch_dol.bss_size, 32));
+        ICInvalidateRange((void *)patch_dol.bss_addr, align_up(patch_dol.bss_size, 32));
+
         for (int i = 0; i < RRC_DOL_SECTION_COUNT; i++)
         {
             u32 sec = patch_dol.section[i];
@@ -119,11 +113,10 @@ int main(int argc, char **argv)
             printf("... %x\n", &v);
         }
 
-        SYS_Report("Entrypoint -> %x\n", patch_dol.entry_point);
-        void (*entry)() = (void *)patch_dol.entry_point;
-        entry();
+        SYS_Report(". Entrypoint -> %x\n", patch_dol.entry_point);
+        SYS_Report("Done!\n");
 
-        usleep(10000000);
+        // usleep(10000000);
     }
 
     SYS_Report("testing stuff\n");
@@ -291,64 +284,124 @@ int main(int argc, char **argv)
         RRC_ASSERTEQ(res, RRC_DI_LIBDI_OK, "rrc_di_read section");
     }
 
-    RRC_ASSERTEQ(dol->section_addr[1], 0x800072c0, "a");
-    RRC_ASSERTEQ(dol->section_addr[1] + dol->section_size[1], 0x80244de0, "b");
-    u32 *v = (u32 *)((u32)dol + dol->section[1] + 2339800);
-    SYS_Report("%x\n", *v);
-    // <memory offset="0x80242698" value="4BDC1968" original="4e800020" />
-    *v = 0x4BDC1968;
-    SYS_Report("%x\n", *v);
+    // {
+    //     SYS_Report("Dumping dol... ");
+    //     for (int i = 0; i < 100; i++)
+    //         SYS_Report("%x ", ((u32 *)dol)[i]);
+    //     SYS_Report("\n");
+    //     ISFS_Initialize();
+    //     s32 sfs = ISFS_Open("/shared2/rrtest/mkw.dol", 2);
+    //     SYS_Report("isfs open = %d\n", sfs);
+    //     s32 res = ISFS_Write(sfs, (void *)0x80901000, 2766240);
+    //     SYS_Report("result = %d\n", res);
+    //     ISFS_Close(sfs);
+    // }
 
-    int custom_size = 128;
-    memcpy(
-        (void *)0x93400060,
-        custom_convert_path_to_entrynum, custom_size);
-    DCInvalidateRange((void *)0x93400060, custom_size);
-    ICInvalidateRange((void *)0x93400060, custom_size);
+    // Branches to Loader.pul, taken from xml
+    // RRC_ASSERTEQ(dol->section_addr[1], 0x800072c0, "a");
+    // RRC_ASSERTEQ(dol->section_addr[1] + dol->section_size[1], 0x80244de0, "b");
+    // u32 *v = (u32 *)((u32)dol + dol->section[1] + 2339800);
+    // SYS_Report("%x\n", *v);
+    // // <memory offset="0x80242698" value="4BDC1968" original="4e800020" />
+    // *v = 0x4BDC1968;
+    // SYS_Report("%x\n", *v);
 
-    strcpy((void *)0x93400100, "Loading --> %s\n");
-    DCInvalidateRange((void *)0x93400100, 32);
+    // Patch convert_to_entry
+    struct function_patch_entry
+    {
+        u32 addr;
+        u32 backjmp_to_original[4];
+        // Only this may change when changing dol
+        u32 jmp_to_custom[4];
+    };
 
-    u32 target_addr = 0x8015df4c; // 0x8015e2bc;
+    struct function_patch_entry entries[] = {
+        // // DVD::ConvertPathToEntrynum
+        // {.addr = 0x8015df4c, .backjmp_to_original = {0x3d208015, 0x6129df5c, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208100, 0x612958f0, 0x7d2903a6, 0x4e800420}},
+        // // DVD::FastOpen
+        // {.addr = 0x8015e254, .backjmp_to_original = {0x3d208015, 0x6129e264, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208100, 0x612956ec, 0x7d2903a6, 0x4e800420}},
+        // // DVD::Open
+        // {.addr = 0, .backjmp_to_original = {0x3d208015, 0x6129e2cc, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {}},
+        // // DVD::ReadPrio
+        // {.addr = 0x8015e834, .backjmp_to_original = {0x3d208015, 0x6129e844, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208100, 0x612957e8, 0x7d2903a6, 0x4e800420}},
+        // DVD::Close
+        // {.addr = 0x8015e568, .backjmp_to_original = {0x3d208015, 0x6129e578, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208100, 0x61295778, 0x7d2903a6, 0x4e800420}},
+    };
 
     for (u32 i = 0; i < RRC_DOL_SECTION_COUNT; i++)
     {
         u32 section_addr = dol->section_addr[i];
         u32 section_size = dol->section_size[i];
         u32 section_offset = dol->section[i];
-
-        if (target_addr >= section_addr && target_addr <= section_addr + section_size)
+        for (int j = 0; j < sizeof(entries) / sizeof(struct function_patch_entry); j++)
         {
-            u32 addr_section_offset = target_addr - section_addr;
-            u32 *virt_target = (void *)((u32)dol + section_offset + addr_section_offset);
+            struct function_patch_entry entry = entries[j];
+            if (entry.addr == 0)
+                continue;
+            u32 target_addr = entry.addr;
 
-            memcpy((void *)(0x93400000), virt_target, 16);
-            ((u32 *)0x93400010)[0] = 0x3d208015;
-            // ((u32 *)0x93400010)[1] = 0x6129e2cc;
-            ((u32 *)0x93400010)[1] = 0x6129df5c;
-            ((u32 *)0x93400010)[2] = 0x7d2903a6;
-            ((u32 *)0x93400010)[3] = 0x4e800420;
-            DCInvalidateRange((void *)0x93400000, 32);
-            ICInvalidateRange((void *)0x93400000, 32);
+            if (target_addr >= section_addr && target_addr <= section_addr + section_size)
+            {
+                u32 addr_section_offset = target_addr - section_addr;
+                u32 *virt_target = (void *)((u32)dol + section_offset + addr_section_offset);
 
-            virt_target[0] = 0x3d209340;
-            virt_target[1] = 0x61290060;
-            virt_target[2] = 0x7d2903a6;
-            virt_target[3] = 0x4e800420;
+                // 32 bytes (4 instructions for the backjmp + 4 overwritten instructions restored) per patched function
+                u32 hooked_addr = 0x93400000 + (j * 32);
+
+                memcpy((void *)hooked_addr, virt_target, 16);
+                memcpy((void *)(hooked_addr + 16), entry.backjmp_to_original, 16);
+                DCInvalidateRange((void *)hooked_addr, 32);
+                ICInvalidateRange((void *)hooked_addr, 32);
+
+                memcpy(virt_target, entry.jmp_to_custom, 16);
+                DCInvalidateRange((void *)virt_target, 32);
+                ICInvalidateRange((void *)virt_target, 32);
+            }
         }
+
+        // if (target_addr >= section_addr && target_addr <= section_addr + section_size)
+        // {
+        //     u32 addr_section_offset = target_addr - section_addr;
+        //     u32 *virt_target = (void *)((u32)dol + section_offset + addr_section_offset);
+
+        //     memcpy((void *)(0x93400000), virt_target, 16);
+
+        //     // Jump back to `target_addr`
+        //     ((u32 *)0x93400010)[0] = 0x3d208015;
+        //     ((u32 *)0x93400010)[1] = 0x6129df5c;
+        //     ((u32 *)0x93400010)[2] = 0x7d2903a6;
+        //     ((u32 *)0x93400010)[3] = 0x4e800420;
+        //     DCInvalidateRange((void *)0x93400000, 32);
+        //     ICInvalidateRange((void *)0x93400000, 32);
+
+        //     // ((u32 *)0x93400010)[1] = 0x6129e2cc;
+
+        //     // Jump to patch helpers 0x810056ec
+        //     /*
+        //     00000000 <x>:
+        //         0:   3d 20 81 00     lis     r9,-32512
+        //         4:   61 29 56 ec     ori     r9,r9,22252
+        //         8:   7d 29 03 a6     mtctr   r9
+        //         c:   4e 80 04 20     bctr
+        //     */
+        //     virt_target[0] = 0x3d208100;
+        //     virt_target[1] = 0x612956ec;
+        //     virt_target[2] = 0x7d2903a6;
+        //     virt_target[3] = 0x4e800420;
+        // }
     }
 
-    RRC_ASSERTEQ(dol->section_addr[0], 0x80004000, "addr");
-    u8 *pul_dest = (u8 *)((u32)dol + dol->section[0]);
+    // // // RRC_ASSERTEQ(dol->section_addr[0], 0x80004000, "addr");
+    // // // u8 *pul_dest = (u8 *)((u32)dol + dol->section[0]);
 
-    FILE *loader_pul_file = fopen("RetroRewind6/Binaries/Loader.pul", "r");
-    RRC_ASSERT(loader_pul_file != NULL, "failed to open");
-    int read = 0;
-    while (read = fread(pul_dest, 1, 4096, loader_pul_file))
-    {
-        SYS_Report("Read %d bytes at %p. (%d)\n", read, pul_dest, PATCH_DOL_LEN);
-        pul_dest += read;
-    }
+    // // // FILE *loader_pul_file = fopen("RetroRewind6/Binaries/Loader.pul", "r");
+    // // // RRC_ASSERT(loader_pul_file != NULL, "failed to open");
+    // // // int read = 0;
+    // // // while (read = fread(pul_dest, 1, 4096, loader_pul_file))
+    // // // {
+    // // //     SYS_Report("Read %d bytes at %p. (%d)\n", read, pul_dest, PATCH_DOL_LEN);
+    // // //     pul_dest += read;
+    // // // }
 
     rrc_con_update("Initialise DVD: Read Filesystem Table", 50);
 
@@ -357,10 +410,10 @@ int main(int argc, char **argv)
 
     u32 fst_size = data_header->fst_size << 2;
     u32 fst_dest = align_down(mem1_hi - fst_size, 32);
-    if (fst_dest < 0x81700000)
-    {
-        RRC_FATAL("fst size too large");
-    }
+    // if (fst_dest < 0x81700000)
+    // {
+    //     RRC_FATAL("fst size too large");
+    // }
     mem1_hi = fst_dest;
     rrc_dbg_printf("FST at %x, size: %d, aligned: %d\n", fst_dest, fst_size, align_up(fst_size, 32));
     res = rrc_di_read((void *)fst_dest, align_up(fst_size, 32), data_header->fst_offset);

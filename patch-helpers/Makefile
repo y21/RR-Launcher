@@ -17,29 +17,30 @@ include $(DEVKITPPC)/wii_rules
 #---------------------------------------------------------------------------------
 TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
-SOURCES		:=	source
+SOURCES		:=	source brainslug-wii/modules/libfat brainslug-wii/modules/libfat-sd brainslug-wii/modules/libsd
 DATA		:=	data
 INCLUDES	:=  
-
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
 
-CFLAGS	= -mno-eabi -g -O2 -Wall $(MACHDEP) $(INCLUDE)
+CFLAGS	=  -mno-eabi -g -O2 -Wall $(MACHDEP) $(INCLUDE)
 CXXFLAGS	=	$(CFLAGS)
  
-LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map,--section-start=.init=0x93400220,--section-start=.text=0x93400400,--section-start=.rodata=0x81740000
+# LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map,--section-start=.init=0x93400220,--section-start=.text=0x93400400,--section-start=.rodata=0x81740000
+LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map,-T../linker.ld,--section-start=.init=0x81003F00,--section-start=.text=0x810040e0,--section-start=.rodata=0x81740000
+
 
 #---------------------------------------------------------------------------------
 # any extra libraries we wish to link with the project
 #---------------------------------------------------------------------------------
-LIBS	:=  -lfat -logc -lm
+LIBS	:= -logc -lm
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:= $(DEVKITPRO)/portlibs/wii $(DEVKITPRO)/portlibs/ppc $(DEVKITPRO)/libogc
+LIBDIRS	:= $(DEVKITPRO)/portlibs/wii $(DEVKITPRO)/portlibs/ppc $(DEVKITPRO)/libogc $(DEVKITPRO)/bslug
 
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional
