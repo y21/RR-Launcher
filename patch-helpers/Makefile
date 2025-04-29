@@ -28,7 +28,8 @@ CFLAGS	=  -mno-eabi -g -O2 -Wall $(MACHDEP) $(INCLUDE)
 CXXFLAGS	=	$(CFLAGS)
  
 # LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map,--section-start=.init=0x93400220,--section-start=.text=0x93400400,--section-start=.rodata=0x81740000
-LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map,-T../linker.ld,--section-start=.init=0x81003F00,--section-start=.text=0x810040e0,--section-start=.rodata=0x81740000
+# LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map,-T../linker.ld,--section-start=.init=0x81003F00,--section-start=.text=0x810040e0,--section-start=.rodata=0x81740000
+LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map,-T../linker.ld,--section-start=.init=0x81700000,--section-start=.text=0x81700512,--section-start=.dvd_convert_path_to_entrynum=0x8171e000,--section-start=.dvd_open=0x8171e400,--section-start=.dvd_fast_open=0x8171e800,--section-start=.dvd_read_prio=0x8171ec00,--section-start=.dvd_close=8171f000,--section-start=.rodata=0x81720000
 
 
 #---------------------------------------------------------------------------------

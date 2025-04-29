@@ -70,6 +70,7 @@ static void init_sd()
 }
 
 static int code_pul_fd = -1;
+static int title_szs_fd = -1;
 
 #define DVD_CONVERT_PATH_TO_ENTRYNUM_ADDR 0x93400000
 #define DVD_FAST_OPEN 0x93400020
@@ -77,18 +78,22 @@ static int code_pul_fd = -1;
 #define DVD_READ_PRIO 0x93400060
 #define DVD_CLOSE 0x93400080
 
-s32 custom_convert_path_to_entrynum(const char *filename)
-{
-	init_sd();
+#define CODE_PUL_ENTRYNUM 918273645
+#define TITLE_SZS_ENTRYNUM (CODE_PUL_ENTRYNUM + 1)
 
+__attribute__((section(".dvd_convert_path_to_entrynum")))
+s32
+custom_convert_path_to_entrynum(const char *filename)
+{
 	OS_Report("ConvertPathToEntrynum(%s)\n", filename);
+
 	if (strcmp(filename, "/Binaries/Code.pul") == 0)
 	{
-		OS_Report("found\n");
-		static FILE_STRUCT fs;
-		code_pul_fd = SD_open(&fs, "RetroRewind6/Binaries/Code.pul", O_RDONLY);
-		OS_Report("Result -> %d, file size:  %d\n", code_pul_fd, fs.filesize);
-		return 918273645;
+		return CODE_PUL_ENTRYNUM;
+	}
+	else if (strcmp(filename, "/Scene/UI/Title.szs") == 0)
+	{
+		return TITLE_SZS_ENTRYNUM;
 	}
 
 	// Return to original overwritten function
@@ -96,21 +101,51 @@ s32 custom_convert_path_to_entrynum(const char *filename)
 	return cb(filename);
 }
 
-s32 custom_fast_open(s32 entry_num, FileInfo *file_info)
+__attribute__((section(".dvd_open")))
+s32
+custom_open()
 {
-	OS_Report("FastOpen(%d)\n", entry_num);
-	if (entry_num == 918273645)
-	{
-		file_info->startAddr = (u32)-1;
-		return 1;
-	}
-
-	// Return to original overwritten function
-	s32 (*cb)(s32, FileInfo *) = (void *)DVD_FAST_OPEN;
-	return cb(entry_num, file_info);
+	// todo
+	return -1;
 }
 
-s32 custom_read_prio(FileInfo *file_info, void *buffer, s32 length, s32 offset, s32 prio)
+__attribute__((section(".dvd_fast_open")))
+s32
+custom_fast_open(s32 entry_num, FileInfo *file_info)
+{
+	init_sd();
+
+	OS_Report("FastOpen(%d)\n", entry_num);
+	static FILE_STRUCT fs;
+	if (entry_num == CODE_PUL_ENTRYNUM)
+	{
+		code_pul_fd = SD_open(&fs, "RetroRewind6/Binaries/Code.pul", O_RDONLY);
+		if (code_pul_fd == -1)
+			return -1;
+		file_info->startAddr = -1;
+		file_info->length = fs.filesize;
+		return 1;
+	}
+	else if (entry_num == TITLE_SZS_ENTRYNUM)
+	{
+		title_szs_fd = SD_open(&fs, "RetroRewind6/UI/Title.szs", O_RDONLY);
+		if (title_szs_fd == -1)
+			return -1;
+		file_info->startAddr = -2;
+		file_info->length = fs.filesize;
+		return 1;
+	}
+	else
+	{
+		// Return to original overwritten function
+		s32 (*cb)(s32, FileInfo *) = (void *)DVD_FAST_OPEN;
+		return cb(entry_num, file_info);
+	}
+}
+
+__attribute__((section(".dvd_read_prio")))
+s32
+custom_read_prio(FileInfo *file_info, void *buffer, s32 length, s32 offset, s32 prio)
 {
 	OS_Report("ReadPrio(%x, %d, %d) (startAddr=%d)\n", buffer, length, offset, file_info->startAddr);
 	if (file_info->startAddr == (u32)-1)
@@ -121,17 +156,29 @@ s32 custom_read_prio(FileInfo *file_info, void *buffer, s32 length, s32 offset, 
 		OS_Report("Read %d bytes.\n", bytes);
 		return bytes;
 	}
+	if (file_info->startAddr == (u32)-2)
+	{
+		SD_seek(title_szs_fd, offset, 0);
+		int bytes = SD_read(title_szs_fd, buffer, length);
+		DCFlushRange(buffer, length);
+		OS_Report("Read %d bytes.\n", bytes);
+		return bytes;
+	}
 
 	s32 (*cb)(FileInfo *, void *, s32, s32, s32) = (void *)DVD_READ_PRIO;
 	return cb(file_info, buffer, length, offset, prio);
 }
 
-bool custom_close(FileInfo *file_info)
+__attribute__((section(".dvd_close"))) bool custom_close(FileInfo *file_info)
 {
 	OS_Report("Close(%d)\n", file_info->startAddr);
 	if (file_info->startAddr == (u32)-1)
 	{
-		return 1;
+		return SD_close(code_pul_fd);
+	}
+	if (file_info->startAddr == (u32)-2)
+	{
+		return SD_close(title_szs_fd);
 	}
 	bool (*cb)(FileInfo *) = (void *)0x80162fec; // call DVDCancel()
 	return cb(file_info);
@@ -141,6 +188,7 @@ int main()
 {
 	// Prevent linker gcing the functions
 	*(volatile u32 *)custom_convert_path_to_entrynum;
+	*(volatile u32 *)custom_open;
 	*(volatile u32 *)custom_fast_open;
 	*(volatile u32 *)custom_read_prio;
 	*(volatile u32 *)custom_close;

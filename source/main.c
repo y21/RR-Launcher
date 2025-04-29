@@ -43,6 +43,7 @@
 #include "prompt.h"
 #include "gui.h"
 #include "res.h"
+#include "riivo.h"
 #include "settingsfile.h"
 #include <setjmp.h>
 #include <ogc/isfs.h>
@@ -59,9 +60,11 @@ void *wiisocket_init_thread_callback(void *res)
     return NULL;
 }
 
+void patching_stuff(u32 *mem1);
+
 int main(int argc, char **argv)
 {
-    u32 mem1_hi = 0x81000000; // reserved for patch helpers
+    u32 mem1_hi = 0x81700000; // reserved for patch helpers
 
     s64 systime_start = gettime();
     // response codes for various library functions
@@ -284,27 +287,20 @@ int main(int argc, char **argv)
         RRC_ASSERTEQ(res, RRC_DI_LIBDI_OK, "rrc_di_read section");
     }
 
-    // {
-    //     SYS_Report("Dumping dol... ");
-    //     for (int i = 0; i < 100; i++)
-    //         SYS_Report("%x ", ((u32 *)dol)[i]);
-    //     SYS_Report("\n");
-    //     ISFS_Initialize();
-    //     s32 sfs = ISFS_Open("/shared2/rrtest/mkw.dol", 2);
-    //     SYS_Report("isfs open = %d\n", sfs);
-    //     s32 res = ISFS_Write(sfs, (void *)0x80901000, 2766240);
-    //     SYS_Report("result = %d\n", res);
-    //     ISFS_Close(sfs);
-    // }
-
     // Branches to Loader.pul, taken from xml
-    // RRC_ASSERTEQ(dol->section_addr[1], 0x800072c0, "a");
-    // RRC_ASSERTEQ(dol->section_addr[1] + dol->section_size[1], 0x80244de0, "b");
-    // u32 *v = (u32 *)((u32)dol + dol->section[1] + 2339800);
-    // SYS_Report("%x\n", *v);
-    // // <memory offset="0x80242698" value="4BDC1968" original="4e800020" />
-    // *v = 0x4BDC1968;
-    // SYS_Report("%x\n", *v);
+    RRC_ASSERTEQ(dol->section_addr[1], 0x800072c0, "a");
+    RRC_ASSERTEQ(dol->section_addr[1] + dol->section_size[1], 0x80244de0, "b");
+    u32 *v = (u32 *)((u32)dol + dol->section[1] + 2339800);
+    SYS_Report("%x\n", *v);
+    // <memory offset="0x80242698" value="4BDC1968" original="4e800020" />
+    *v = 0x4BDC1968;
+    DCFlushRange((void *)v, 32);
+    SYS_Report("%x\n", *v);
+    // <memory offset="0x8000A3F4" value="4bff9c0c" original="4e800020" /> <!--RMCP REL-->
+    v = (u32 *)((u32)dol + dol->section[1] + 12596);
+    *v = 0x4bff9c0c;
+    DCFlushRange((void *)v, 32);
+    SYS_Report("%x\n", *v);
 
     // Patch convert_to_entry
     struct function_patch_entry
@@ -316,16 +312,16 @@ int main(int argc, char **argv)
     };
 
     struct function_patch_entry entries[] = {
-        // // DVD::ConvertPathToEntrynum
-        // {.addr = 0x8015df4c, .backjmp_to_original = {0x3d208015, 0x6129df5c, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208100, 0x612958f0, 0x7d2903a6, 0x4e800420}},
-        // // DVD::FastOpen
-        // {.addr = 0x8015e254, .backjmp_to_original = {0x3d208015, 0x6129e264, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208100, 0x612956ec, 0x7d2903a6, 0x4e800420}},
-        // // DVD::Open
-        // {.addr = 0, .backjmp_to_original = {0x3d208015, 0x6129e2cc, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {}},
-        // // DVD::ReadPrio
-        // {.addr = 0x8015e834, .backjmp_to_original = {0x3d208015, 0x6129e844, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208100, 0x612957e8, 0x7d2903a6, 0x4e800420}},
+        // DVD::ConvertPathToEntrynum
+        {.addr = 0x8015df4c, .backjmp_to_original = {0x3d208015, 0x6129df5c, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208171, 0x6129e000, 0x7d2903a6, 0x4e800420}},
+        // DVD::FastOpen
+        {.addr = 0x8015e254, .backjmp_to_original = {0x3d208015, 0x6129e264, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208171, 0x6129e800, 0x7d2903a6, 0x4e800420}},
+        // DVD::Open
+        {.addr = 0, .backjmp_to_original = {0x3d208015, 0x6129e2cc, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {}},
+        // DVD::ReadPrio
+        {.addr = 0x8015e834, .backjmp_to_original = {0x3d208015, 0x6129e844, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208171, 0x6129ec00, 0x7d2903a6, 0x4e800420}},
         // DVD::Close
-        // {.addr = 0x8015e568, .backjmp_to_original = {0x3d208015, 0x6129e578, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208100, 0x61295778, 0x7d2903a6, 0x4e800420}},
+        {.addr = 0x8015e568, .backjmp_to_original = {0x3d208015, 0x6129e578, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208171, 0x6129f000, 0x7d2903a6, 0x4e800420}},
     };
 
     for (u32 i = 0; i < RRC_DOL_SECTION_COUNT; i++)
@@ -358,50 +354,20 @@ int main(int argc, char **argv)
                 ICInvalidateRange((void *)virt_target, 32);
             }
         }
-
-        // if (target_addr >= section_addr && target_addr <= section_addr + section_size)
-        // {
-        //     u32 addr_section_offset = target_addr - section_addr;
-        //     u32 *virt_target = (void *)((u32)dol + section_offset + addr_section_offset);
-
-        //     memcpy((void *)(0x93400000), virt_target, 16);
-
-        //     // Jump back to `target_addr`
-        //     ((u32 *)0x93400010)[0] = 0x3d208015;
-        //     ((u32 *)0x93400010)[1] = 0x6129df5c;
-        //     ((u32 *)0x93400010)[2] = 0x7d2903a6;
-        //     ((u32 *)0x93400010)[3] = 0x4e800420;
-        //     DCInvalidateRange((void *)0x93400000, 32);
-        //     ICInvalidateRange((void *)0x93400000, 32);
-
-        //     // ((u32 *)0x93400010)[1] = 0x6129e2cc;
-
-        //     // Jump to patch helpers 0x810056ec
-        //     /*
-        //     00000000 <x>:
-        //         0:   3d 20 81 00     lis     r9,-32512
-        //         4:   61 29 56 ec     ori     r9,r9,22252
-        //         8:   7d 29 03 a6     mtctr   r9
-        //         c:   4e 80 04 20     bctr
-        //     */
-        //     virt_target[0] = 0x3d208100;
-        //     virt_target[1] = 0x612956ec;
-        //     virt_target[2] = 0x7d2903a6;
-        //     virt_target[3] = 0x4e800420;
-        // }
     }
 
-    // // // RRC_ASSERTEQ(dol->section_addr[0], 0x80004000, "addr");
-    // // // u8 *pul_dest = (u8 *)((u32)dol + dol->section[0]);
+    RRC_ASSERTEQ(dol->section_addr[0], 0x80004000, "addr");
+    u8 *pul_dest = (u8 *)((u32)dol + dol->section[0]);
 
-    // // // FILE *loader_pul_file = fopen("RetroRewind6/Binaries/Loader.pul", "r");
-    // // // RRC_ASSERT(loader_pul_file != NULL, "failed to open");
-    // // // int read = 0;
-    // // // while (read = fread(pul_dest, 1, 4096, loader_pul_file))
-    // // // {
-    // // //     SYS_Report("Read %d bytes at %p. (%d)\n", read, pul_dest, PATCH_DOL_LEN);
-    // // //     pul_dest += read;
-    // // // }
+    FILE *loader_pul_file = fopen("RetroRewind6/Binaries/Loader.pul", "r");
+    RRC_ASSERT(loader_pul_file != NULL, "failed to open");
+    int read = 0;
+    while (read = fread(pul_dest, 1, 4096, loader_pul_file))
+    {
+        SYS_Report("Read %d bytes at %p. (%d)\n", read, pul_dest, PATCH_DOL_LEN);
+        pul_dest += read;
+    }
+    patching_stuff(&mem1_hi);
 
     rrc_con_update("Initialise DVD: Read Filesystem Table", 50);
 
@@ -410,6 +376,7 @@ int main(int argc, char **argv)
 
     u32 fst_size = data_header->fst_size << 2;
     u32 fst_dest = align_down(mem1_hi - fst_size, 32);
+    // TODO: why is this check a thing???
     // if (fst_dest < 0x81700000)
     // {
     //     RRC_FATAL("fst size too large");
@@ -441,4 +408,105 @@ int main(int argc, char **argv)
     rrc_loader_load(dol, bi2, mem1_hi, mem2_hi);
 
     return 0;
+}
+
+char *bump_alloc_string(u32 *mem1, const char *src)
+{
+    *mem1 -= strlen(src) + 1;
+    char *dest = (char *)*mem1;
+    strcpy(dest, src);
+    return dest;
+}
+
+void patching_stuff(u32 *mem1)
+{
+#define MAX_PATCHES 1000
+
+    *mem1 -= sizeof(struct rrc_riivo_disc_replacement) * MAX_PATCHES;
+    struct rrc_riivo_disc_replacement *riivo_patches = (void *)*mem1;
+
+    // Read the XML to extract all possible options for the entries.
+    FILE *
+        xml_file = fopen("RetroRewind6/xml/RetroRewind6.xml", "r");
+    if (!xml_file)
+    {
+        RRC_FATAL("failed to open RetroRewind6.xml file: %d", errno);
+    }
+
+    mxml_node_t *xml_top = mxmlLoadFile(NULL, xml_file, NULL);
+
+    // TODO: load these active patches from the settings
+    const char *active_patches[] = {"RRLoadPack", "RRFileReplacements"};
+    // TODO: maybe handle <memory> patches here also?
+
+    int patch_count = 0;
+    for (mxml_node_t *cur = mxmlFindElement(xml_top, xml_top, "patch", NULL, NULL, MXML_DESCEND_FIRST); cur != NULL; cur = mxmlGetNextSibling(cur))
+    {
+        RRC_ASSERT(patch_count < MAX_PATCHES, "too many file/folder replacements!");
+
+        if (mxmlGetType(cur) != MXML_ELEMENT)
+            continue;
+
+        if (strcmp(mxmlGetElement(cur), "patch") != 0)
+            continue;
+
+        // We have a <patch> element. Check if the id is an enabled setting, then process any of its contained <file> and <folder> elements.
+        const char *elem_id = mxmlElementGetAttr(cur, "id");
+        bool enabled = false;
+        for (int i = 0; i < sizeof(active_patches) / sizeof(const char *); i++)
+        {
+            if (strcmp(active_patches[i], elem_id) == 0)
+            {
+                enabled = true;
+                break;
+            }
+        }
+        if (!enabled)
+            continue;
+
+        mxml_index_t *file_repl_index = mxmlIndexNew(cur, "file", NULL);
+        for (mxml_node_t *file = mxmlIndexEnum(file_repl_index); file != NULL; file = mxmlIndexEnum(file_repl_index))
+        {
+            const char *disc_path_mxml = mxmlElementGetAttr(file, "disc");
+            RRC_ASSERT(disc_path_mxml != NULL, "missing disc attribute on <file>");
+
+            const char *external_path_mxml = mxmlElementGetAttr(file, "external");
+            RRC_ASSERT(external_path_mxml != NULL, "missing external attribute on <file>");
+
+            char *disc_path_m1 = bump_alloc_string(mem1, disc_path_mxml);
+            char *external_path_m1 = bump_alloc_string(mem1, external_path_mxml);
+
+            struct rrc_riivo_disc_replacement *patch_dist = &riivo_patches[patch_count];
+            patch_dist->disc = disc_path_m1;
+            patch_dist->external = external_path_m1;
+            patch_dist->type = RRC_RIIVO_FILE_REPLACEMENT;
+            patch_count++;
+        }
+
+        mxml_index_t *folder_repl_index = mxmlIndexNew(cur, "folder", NULL);
+        for (mxml_node_t *folder = mxmlIndexEnum(folder_repl_index); folder != NULL; folder = mxmlIndexEnum(folder_repl_index))
+        {
+            const char *disc_path_mxml = mxmlElementGetAttr(folder, "disc");
+            RRC_ASSERT(disc_path_mxml != NULL, "missing disc attribute on <file>");
+
+            // external can be omitted!
+            const char *external_path_mxml = mxmlElementGetAttr(folder, "external");
+
+            char *disc_path_m1 = bump_alloc_string(mem1, disc_path_mxml);
+            char *external_path_m1 = external_path_mxml ? bump_alloc_string(mem1, external_path_mxml) : NULL;
+
+            struct rrc_riivo_disc_replacement *patch_dist = &riivo_patches[patch_count];
+            patch_dist->disc = disc_path_m1;
+            patch_dist->external = external_path_m1;
+            patch_dist->type = RRC_RIIVO_FOLDER_REPLACEMENT;
+            patch_count++;
+        }
+    }
+
+    // for (int i = 0; i < patch_count; i++)
+    // {
+    //     SYS_Report("File replacement #%d: %s -> %s\n", i + 1, riivo_patches[i].disc, riivo_patches[i].external);
+    // }
+    // SYS_Report("Riivo patches ptr = %x\n", riivo_patches);
+    RRC_ASSERTEQ(riivo_patches, (void *)0x816fd120, "Riivo patches pointer changed!!");
 }
