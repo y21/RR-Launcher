@@ -135,8 +135,7 @@ void rrc_loader_load(void *dol, void *bi2_dest, u32 mem1_hi, u32 mem2_hi)
 
     // Addresses are taken from <https://wiibrew.org/wiki/Memory_map> for the most part.
 
-    *(u32 *)0xCD006C00 = 0x00000000; // Reset `AI_CONTROL` to fix audio
-    memcpy((u32 *)0x80000000, "RMCP01", 6);
+    *(u32 *)0xCD006C00 = 0x00000000;           // Reset `AI_CONTROL` to fix audio
     *(u32 *)0x80000034 = 0;                    // Arena High
     *(u32 *)0x800000EC = 0x81800000;           // Dev Debugger Monitor Address
     *(u32 *)0x800000F0 = 0x01800000;           // Simulated Memory Size
@@ -149,6 +148,10 @@ void rrc_loader_load(void *dol, void *bi2_dest, u32 mem1_hi, u32 mem2_hi)
     *(u32 *)0x80003180 = *(u32 *)(0x80000000); // Game ID
     *(u32 *)0x80003188 = *(u32 *)(0x80003140); // Minimum IOS Version
 
+    memcpy((u32 *)0x80000000, "RMCP01", 6);
+    memcpy((u32 *)0x80000000, "RMCP01", 6);
+    memcpy((u32 *)0x80003180, "RMCP", 4);
+
     if (*(u32 *)((u32)bi2_dest + 0x30) == 0x7ED40000)
     {
         *(u8 *)0x8000319C = 0x81; // Disc is dual layer
@@ -159,6 +162,8 @@ void rrc_loader_load(void *dol, void *bi2_dest, u32 mem1_hi, u32 mem2_hi)
     }
     DCStoreRange((void *)0x80000000, 0x3400);
     ICInvalidateRange((void *)0x80000000, 0x3400);
+    DCFlushRangeNoSync((void *)0x80000000, 0x01800000);
+    ICFlashInvalidate();
 
     rrc_con_update("Patch and Launch Game", 75);
 

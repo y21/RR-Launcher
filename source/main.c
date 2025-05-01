@@ -47,6 +47,7 @@
 #include "settingsfile.h"
 #include <setjmp.h>
 #include <ogc/isfs.h>
+#include <gccore.h>
 
 /* 100ms */
 #define DISKCHECK_DELAY 100000
@@ -65,6 +66,7 @@ void patching_stuff(u32 *mem1);
 int main(int argc, char **argv)
 {
     u32 mem1_hi = 0x81700000; // reserved for patch helpers
+    u32 mem2_hi = *(u32 *)0x80003128;
 
     s64 systime_start = gettime();
     // response codes for various library functions
@@ -82,7 +84,6 @@ int main(int argc, char **argv)
     chdir("../../../../..");
 
     {
-
         FILE *patch_file = fopen("patch-helpers.dol", "r");
         RRC_ASSERT(patch_file != NULL, "patch file");
         struct rrc_dol patch_dol __attribute__((aligned(32)));
@@ -112,14 +113,7 @@ int main(int argc, char **argv)
             DCFlushRange((void *)align_down(sec_addr, 32), align_up(sec_size + 32, 32));
             ICInvalidateRange((void *)align_down(sec_addr, 32), align_up(sec_size + 32, 32));
             RRC_ASSERTEQ(read, 1, "fully read section");
-            int v = 42;
-            printf("... %x\n", &v);
         }
-
-        SYS_Report(". Entrypoint -> %x\n", patch_dol.entry_point);
-        SYS_Report("Done!\n");
-
-        // usleep(10000000);
     }
 
     SYS_Report("testing stuff\n");
@@ -296,7 +290,7 @@ int main(int argc, char **argv)
     *v = 0x4BDC1968;
     DCFlushRange((void *)v, 32);
     SYS_Report("%x\n", *v);
-    // <memory offset="0x8000A3F4" value="4bff9c0c" original="4e800020" /> <!--RMCP REL-->
+    // <memory offset = "0x8000A3F4" value = "4bff9c0c" original = "4e800020" /><!--RMCP REL-->
     v = (u32 *)((u32)dol + dol->section[1] + 12596);
     *v = 0x4bff9c0c;
     DCFlushRange((void *)v, 32);
@@ -362,16 +356,14 @@ int main(int argc, char **argv)
     FILE *loader_pul_file = fopen("RetroRewind6/Binaries/Loader.pul", "r");
     RRC_ASSERT(loader_pul_file != NULL, "failed to open");
     int read = 0;
-    while (read = fread(pul_dest, 1, 4096, loader_pul_file))
+    while ((read = fread(pul_dest, 1, 4096, loader_pul_file)))
     {
-        SYS_Report("Read %d bytes at %p. (%d)\n", read, pul_dest, PATCH_DOL_LEN);
         pul_dest += read;
     }
     patching_stuff(&mem1_hi);
 
     rrc_con_update("Initialise DVD: Read Filesystem Table", 50);
 
-    u32 mem2_hi = *(u32 *)0x80003128;
     rrc_dbg_printf("mem1 hi: %x, mem2 hi %x\n", mem1_hi, mem2_hi);
 
     u32 fst_size = data_header->fst_size << 2;
@@ -423,7 +415,8 @@ void patching_stuff(u32 *mem1)
 #define MAX_PATCHES 1000
 
     *mem1 -= sizeof(struct rrc_riivo_disc_replacement) * MAX_PATCHES;
-    struct rrc_riivo_disc_replacement *riivo_patches = (void *)*mem1;
+    *mem1 -= sizeof(struct rrc_riivo_disc);
+    struct rrc_riivo_disc *riivo_disc = (void *)*mem1;
 
     // Read the XML to extract all possible options for the entries.
     FILE *
@@ -439,10 +432,9 @@ void patching_stuff(u32 *mem1)
     const char *active_patches[] = {"RRLoadPack", "RRFileReplacements"};
     // TODO: maybe handle <memory> patches here also?
 
-    int patch_count = 0;
     for (mxml_node_t *cur = mxmlFindElement(xml_top, xml_top, "patch", NULL, NULL, MXML_DESCEND_FIRST); cur != NULL; cur = mxmlGetNextSibling(cur))
     {
-        RRC_ASSERT(patch_count < MAX_PATCHES, "too many file/folder replacements!");
+        RRC_ASSERT(riivo_disc->count < MAX_PATCHES, "too many file/folder replacements!");
 
         if (mxmlGetType(cur) != MXML_ELEMENT)
             continue;
@@ -476,11 +468,11 @@ void patching_stuff(u32 *mem1)
             char *disc_path_m1 = bump_alloc_string(mem1, disc_path_mxml);
             char *external_path_m1 = bump_alloc_string(mem1, external_path_mxml);
 
-            struct rrc_riivo_disc_replacement *patch_dist = &riivo_patches[patch_count];
+            struct rrc_riivo_disc_replacement *patch_dist = &riivo_disc->replacements[riivo_disc->count];
             patch_dist->disc = disc_path_m1;
             patch_dist->external = external_path_m1;
             patch_dist->type = RRC_RIIVO_FILE_REPLACEMENT;
-            patch_count++;
+            riivo_disc->count++;
         }
 
         mxml_index_t *folder_repl_index = mxmlIndexNew(cur, "folder", NULL);
@@ -491,22 +483,21 @@ void patching_stuff(u32 *mem1)
 
             // external can be omitted!
             const char *external_path_mxml = mxmlElementGetAttr(folder, "external");
+            RRC_ASSERT(external_path_mxml != NULL, "NULL external is not handled well in the 2nd dol");
 
             char *disc_path_m1 = bump_alloc_string(mem1, disc_path_mxml);
             char *external_path_m1 = external_path_mxml ? bump_alloc_string(mem1, external_path_mxml) : NULL;
 
-            struct rrc_riivo_disc_replacement *patch_dist = &riivo_patches[patch_count];
+            struct rrc_riivo_disc_replacement *patch_dist = &riivo_disc->replacements[riivo_disc->count];
             patch_dist->disc = disc_path_m1;
             patch_dist->external = external_path_m1;
             patch_dist->type = RRC_RIIVO_FOLDER_REPLACEMENT;
-            patch_count++;
+            SYS_Report("Found folder: %s\n", patch_dist->disc);
+            riivo_disc->count++;
         }
     }
 
-    // for (int i = 0; i < patch_count; i++)
-    // {
-    //     SYS_Report("File replacement #%d: %s -> %s\n", i + 1, riivo_patches[i].disc, riivo_patches[i].external);
-    // }
-    // SYS_Report("Riivo patches ptr = %x\n", riivo_patches);
-    RRC_ASSERTEQ(riivo_patches, (void *)0x816fd120, "Riivo patches pointer changed!!");
+    SYS_Report("Count = %d\n", riivo_disc->count);
+
+    RRC_ASSERTEQ(riivo_disc, (void *)0x816fd11c, "Riivo patches pointer changed!! Adjust the pointer in linker.ld and here.");
 }

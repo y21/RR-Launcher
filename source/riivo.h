@@ -1,6 +1,8 @@
 #ifndef RRC_RIIVO_H
 #define RRC_RIIVO_H
 
+#include <gctypes.h>
+
 enum rrc_riivo_disc_replacement_type
 {
     RRC_RIIVO_FILE_REPLACEMENT,
@@ -12,6 +14,12 @@ struct rrc_riivo_disc_replacement
     enum rrc_riivo_disc_replacement_type type;
     const char *external;
     const char *disc;
+};
+
+struct rrc_riivo_disc
+{
+    u32 count;
+    struct rrc_riivo_disc_replacement replacements[0];
 };
 
 #endif
