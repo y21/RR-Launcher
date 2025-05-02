@@ -47,7 +47,6 @@
 #include "settingsfile.h"
 #include <setjmp.h>
 #include <ogc/isfs.h>
-#include <gccore.h>
 
 /* 100ms */
 #define DISKCHECK_DELAY 100000
@@ -65,6 +64,8 @@ void patching_stuff(u32 *mem1);
 
 int main(int argc, char **argv)
 {
+    IOS_ReloadIOS(80);
+
     u32 mem1_hi = 0x81700000; // reserved for patch helpers
     u32 mem2_hi = *(u32 *)0x80003128;
 
@@ -81,7 +82,7 @@ int main(int argc, char **argv)
     rrc_dbg_printf("Initialising SD card");
     RRC_ASSERTEQ(fatInitDefault(), true, "fatInitDefault()");
     // force filesystem root
-    chdir("../../../../..");
+    chdir("../..");
 
     {
         FILE *patch_file = fopen("patch-helpers.dol", "r");
