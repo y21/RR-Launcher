@@ -11,12 +11,11 @@ SECTIONS {
     PROVIDE(VIWaitForRetrace = 0x801b99ec);
     PROVIDE(OS_Report = 0x801A25D0);
 
-    # MAP.txt
+    # MAP.txt provided
     PROVIDE(iosCreateHeap = 0x801949b8);
     PROVIDE(iosAlloc = 0x80194ae8);
     PROVIDE(iosAllocAligned = 0x80194cec);
     PROVIDE(iosFree = 0x80194cf0);
-
     PROVIDE(IOS_OpenAsync = 0x801937e0);
     PROVIDE(IOS_Open = 0x801938f8);
     PROVIDE(IOS_CloseAsync = 0x80193a18);
@@ -33,6 +32,5 @@ SECTIONS {
     PROVIDE(IOS_IoctlvAsync = 0x801944fc);
     PROVIDE(IOS_Ioctlv = 0x801945e0);
     PROVIDE(IOS_IoctlvReboot = 0x801946bc);
-
     PROVIDE(DCFlushRange = 0x801a162c);
 }

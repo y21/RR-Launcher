@@ -22,4 +22,12 @@ struct rrc_riivo_disc
     struct rrc_riivo_disc_replacement replacements[0];
 };
 
+struct rrc_riivo_memory_patch
+{
+    u32 addr;
+    u32 value;
+    u32 original; // uninitialized if !original_init
+    bool original_init;
+};
+
 #endif

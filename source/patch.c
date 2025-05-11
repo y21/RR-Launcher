@@ -41,8 +41,9 @@
 
 #include <stdint.h>
 #include "dol.h"
+#include "riivo.h"
 
-void patch_dol(struct rrc_dol *dol, void (*dc_flush_range)(void *, u32), void (*ic_invalidate_range)(void *, u32))
+void patch_dol(struct rrc_dol *dol, struct rrc_riivo_memory_patch *mem_patches, int mem_patch_count, void (*ic_invalidate_range)(void *, u32), void (*dc_flush_range)(void *, u32))
 {
     // First, zero BSS.
     u64 *bss8 = (u64 *)dol->bss_addr;
@@ -71,6 +72,21 @@ void patch_dol(struct rrc_dol *dol, void (*dc_flush_range)(void *, u32), void (*
 
         dc_flush_range((void *)to, size);
         ic_invalidate_range((void *)to, size);
+    }
+
+    for (int i = 0; i < mem_patch_count; i++)
+    {
+        struct rrc_riivo_memory_patch *patch = &mem_patches[i];
+        u32 *dest = (u32 *)patch->addr;
+        u32 value = *dest;
+        if (patch->original_init && patch->original != value)
+        {
+            // Original doesn't match, skip the patch.
+            continue;
+        }
+        *dest = patch->value;
+        dc_flush_range(dest, 32);
+        ic_invalidate_range(dest, 32);
     }
 
     ((void (*)())dol->entry_point)();

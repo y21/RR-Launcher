@@ -86,12 +86,18 @@ static void xml_find_option_choices(mxml_node_t *node, mxml_node_t *top, const c
 
     int count = mxmlIndexGetCount(index);
     const char **out = malloc(sizeof(char *) * (count + 1 /* + implicit 'disabled' */));
+    mxmlIndexDelete(index);
     out[0] = "Disabled";
 
-    mxml_node_t *choice;
     int i = 1;
-    while ((choice = mxmlIndexEnum(index)) != NULL)
+    // NOTE: the element order is important here as the settings uses indices, and mxml index sorts them by name, so we can't use the index here.
+    for (mxml_node_t *choice = mxmlFindElement(option_node, top, "choice", NULL, NULL, MXML_DESCEND_FIRST); choice != NULL; choice = mxmlGetNextSibling(choice))
     {
+        if (mxmlGetType(choice) != MXML_ELEMENT)
+        {
+            continue;
+        }
+
         const char *choice_s = mxmlElementGetAttr(choice, "name");
         RRC_ASSERT(choice_s != NULL, "malformed RetroRewind6.xml: choice has no name attribute");
 
@@ -99,7 +105,6 @@ static void xml_find_option_choices(mxml_node_t *node, mxml_node_t *top, const c
         out[i++] = choice_s;
     }
 
-    mxmlIndexDelete(index);
     *result_choice = out;
     *result_choice_count = i;
 
