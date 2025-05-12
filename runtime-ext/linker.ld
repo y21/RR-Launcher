@@ -10,8 +10,10 @@ SECTIONS {
     PROVIDE(OSTicksToCalendarTime = 0x801aafa8);
     PROVIDE(VIWaitForRetrace = 0x801b99ec);
     PROVIDE(OS_Report = 0x801A25D0);
+    PROVIDE(OS_Fatal = 0x801A4EC4);
 
     # MAP.txt provided
+    PROVIDE(snprintf = 0x80011938);
     PROVIDE(iosCreateHeap = 0x801949b8);
     PROVIDE(iosAlloc = 0x80194ae8);
     PROVIDE(iosAllocAligned = 0x80194cec);

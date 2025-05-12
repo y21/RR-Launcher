@@ -210,6 +210,7 @@ static void append_patches_for_option(mxml_node_t *top, mxml_index_t *index, con
  */
 static void parse_riivo_patches(struct rrc_settingsfile *settings, u32 *mem1, u32 *mem2, struct rrc_riivo_memory_patch **mem_patches, int *mem_patches_count)
 {
+    u32 mem1_orig = *mem1;
     // TODO: check if we could easily put these in MEM2 instead of MEM1
     // Reserve space for file/folder replacements.
     *mem1 -= sizeof(struct rrc_riivo_disc_replacement) * MAX_FILE_PATCHES;
@@ -358,6 +359,8 @@ static void parse_riivo_patches(struct rrc_settingsfile *settings, u32 *mem1, u3
 
     // This address is a `static` in the runtime-ext dol that holds a pointer to the replacements, defined in the linker script.
     *((struct rrc_riivo_disc **)(0x81782fa0)) = riivo_disc;
+    DCFlushRange((void*)*mem1, align_up(mem1_orig - *mem1,32));
+    ICInvalidateRange((void*)*mem1, align_up(mem1_orig - *mem1,32));
 }
 
 void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, void *bi2_dest, u32 mem1_hi, u32 mem2_hi)
@@ -405,11 +408,11 @@ void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, voi
 
                 memcpy((void *)hooked_addr, virt_target, 16);
                 memcpy((void *)(hooked_addr + 16), entry.backjmp_to_original, 16);
-                DCInvalidateRange((void *)hooked_addr, 32);
+                DCFlushRange((void *)hooked_addr, 32);
                 ICInvalidateRange((void *)hooked_addr, 32);
 
                 memcpy(virt_target, entry.jmp_to_custom, 16);
-                DCInvalidateRange((void *)virt_target, 32);
+                DCFlushRange((void *)virt_target, 32);
                 ICInvalidateRange((void *)virt_target, 32);
             }
         }
@@ -500,7 +503,7 @@ void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, voi
     __IOS_ShutdownSubsystems();
     for (u32 i = 0; i < 32; i++)
     {
-        IOS_CloseAsync(i, 0, 0);
+        IOS_Close(i);
     }
 
     IRQ_Disable();
@@ -523,7 +526,6 @@ void rrc_loader_load_runtime_ext()
     for (int i = 0; i < patch_dol.bss_size; i++)
         *(u8 *)(patch_dol.bss_addr + i) = 0;
 
-    DCInvalidateRange((void *)align_down(patch_dol.bss_addr, 32), align_up(patch_dol.bss_size, 32));
     DCFlushRange((void *)align_down(patch_dol.bss_addr, 32), align_up(patch_dol.bss_size, 32));
     ICInvalidateRange((void *)align_down(patch_dol.bss_addr, 32), align_up(patch_dol.bss_size, 32));
 
@@ -541,9 +543,7 @@ void rrc_loader_load_runtime_ext()
         }
 
         fseek(patch_file, sec, SEEK_SET);
-        SYS_Report("Section %d at %x with size %d\n", sec, sec_addr, sec_size);
         read = fread((void *)sec_addr, sec_size, 1, patch_file);
-        DCInvalidateRange((void *)align_down(sec_addr, 32), align_up(sec_size + 32, 32));
         DCFlushRange((void *)align_down(sec_addr, 32), align_up(sec_size + 32, 32));
         ICInvalidateRange((void *)align_down(sec_addr, 32), align_up(sec_size + 32, 32));
         RRC_ASSERTEQ(read, 1, "fully read section");

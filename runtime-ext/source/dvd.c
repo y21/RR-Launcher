@@ -2,11 +2,11 @@
 #include <fcntl.h>
 #include <string.h>
 #include "sd.h"
-#include "slots.h"
 #include "dvd.h"
 #include "util.h"
 #include "../brainslug-wii/bslug_include/io/fat.h"
 #include "../brainslug-wii/bslug_include/io/fat-sd.h"
+#include "../brainslug-wii/bslug_include/stdio.h"
 #include "../brainslug-wii/bslug_include/rvl/cache.h"
 #include "../../source/riivo.h"
 
@@ -173,7 +173,6 @@ __attribute__((noinline))
 s32
 custom_convert_path_to_entry_num_impl(const char *filename)
 {
-
     OS_Report("ConvertPathToEntrynum(%s)\n", filename);
 
     s32 entry_num;
@@ -246,7 +245,6 @@ s32
 custom_fast_open_impl(s32 entry_num, FileInfo *file_info)
 {
     OS_Report("FastOpen(%d)\n", entry_num);
-
     if ((entry_num & SPECIAL_ENTRYNUM_MASK) == SPECIAL_ENTRYNUM)
     {
         entry_num &= ~SPECIAL_ENTRYNUM_MASK;
@@ -300,6 +298,7 @@ custom_read_prio_impl(FileInfo *file_info, void *buffer, s32 length, s32 offset,
         }
 
         DCFlushRange(buffer, align_up(length, 32));
+        ICInvalidateRange(buffer, align_up(length, 32));
         return bytes;
     }
 

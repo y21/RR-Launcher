@@ -4,13 +4,16 @@
 #include <gctypes.h>
 
 void OS_Report(const char *, ...);
+void OS_Fatal(u32 *, u32 *, const char *);
 
-#define FATAL(msg)              \
-    do                          \
-    {                           \
-        OS_Report("%s\n", msg); \
-        while (1)               \
-            ;                   \
+
+#define FATAL(msg)                   \
+    do                               \
+    {                                \
+        u32 fg = 0xFFFFFFFF, bg = 0; \
+        OS_Fatal(&fg, &bg, msg);     \
+        while (1)                    \
+            ;                        \
     } while (0);
 
 u32 align_down(u32 num, u32 align_as);

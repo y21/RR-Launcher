@@ -4,6 +4,8 @@
 #include "util.h"
 #include "../brainslug-wii/bslug_include/io/fat.h"
 #include "../brainslug-wii/bslug_include/io/fat-sd.h"
+#include "../brainslug-wii/bslug_include/stdio.h"
+#include "../brainslug-wii/bslug_include/errno.h"
 
 s32 rrc_rt_sd_init()
 {
@@ -11,8 +13,20 @@ s32 rrc_rt_sd_init()
     if (!mounted)
     {
         int res = SD_Mount();
-        OS_Report("Mount = %d\n", res);
+        if (res != 0)
+        {
+            char buf[128];
+            snprintf(buf, sizeof(buf), "SD_Mount failed: %d (errno:%d)\n", res, errno);
+            FATAL(buf);
+        }
         mounted = true;
+        res = SD_chdir("sd:/");
+        if (res != 0)
+        {
+            char buf[128];
+            snprintf(buf, sizeof(buf), "SD_chdhir failed: %d (errno:%d)\n", res, errno);
+            FATAL(buf);
+        }
         return res;
     }
     return 0;
