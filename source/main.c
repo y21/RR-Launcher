@@ -65,7 +65,7 @@ int main(int argc, char **argv)
     // There are bugs in pulsar with USB/HIDv5 if the IOS version is 59, which HBC commonly boots programs with.
     // Use a version used by the game that is known to work with pulsar.
     // FIXME: try to use the disk's IOS version?
-    IOS_ReloadIOS(37);
+    RRC_ASSERTEQ(IOS_ReloadIOS(37), 0, "Failed to reload IOS");
 
     // We reserve ~1MB of MEM1 upfront for the runtime-ext dol.
     u32 mem1_hi = 0x81744260;

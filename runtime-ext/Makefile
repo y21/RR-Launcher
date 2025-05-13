@@ -26,8 +26,9 @@ INCLUDES	:=
 
 CFLAGS	=  -mno-eabi -g -O2 -Wall $(MACHDEP) $(INCLUDE)
 CXXFLAGS	=	$(CFLAGS)
- 
-LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map,-T../linker.ld,--section-start=.init=81744260,--section-start=.text=81744660,--section-start=.dvd_convert_path_to_entrynum=81782e60,--section-start=.dvd_open=81782ea0,--section-start=.dvd_fast_open=81782ee0,--section-start=.dvd_read_prio=81782f20,--section-start=.dvd_close=81782f60,--section-start=.set_riivo_disc_ptr=81782fa0,--section-start=.rodata=81782fe0
+
+# .init, .text, .rodata are defined here so as to override libogc's linker script
+LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map,-T../linker.ld,--section-start=.init=81744260,--section-start=.text=81744660,--section-start=.rodata=81782fe0
 
 
 #---------------------------------------------------------------------------------

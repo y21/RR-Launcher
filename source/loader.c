@@ -32,6 +32,7 @@
 #include "riivo.h"
 #include "util.h"
 #include <mxml.h>
+#include <wiisocket.h>
 
 int rrc_loader_locate_data_part(u32 *data_part_offset)
 {
@@ -211,7 +212,6 @@ static void append_patches_for_option(mxml_node_t *top, mxml_index_t *index, con
 static void parse_riivo_patches(struct rrc_settingsfile *settings, u32 *mem1, u32 *mem2, struct rrc_riivo_memory_patch **mem_patches, int *mem_patches_count)
 {
     u32 mem1_orig = *mem1;
-    // TODO: check if we could easily put these in MEM2 instead of MEM1
     // Reserve space for file/folder replacements.
     *mem1 -= sizeof(struct rrc_riivo_disc_replacement) * MAX_FILE_PATCHES;
     *mem1 -= sizeof(struct rrc_riivo_disc);
@@ -358,32 +358,37 @@ static void parse_riivo_patches(struct rrc_settingsfile *settings, u32 *mem1, u3
     }
 
     // This address is a `static` in the runtime-ext dol that holds a pointer to the replacements, defined in the linker script.
-    *((struct rrc_riivo_disc **)(0x81782fa0)) = riivo_disc;
-    DCFlushRange((void*)*mem1, align_up(mem1_orig - *mem1,32));
-    ICInvalidateRange((void*)*mem1, align_up(mem1_orig - *mem1,32));
+    *((struct rrc_riivo_disc **)(RRC_RIIVO_DISC_PTR)) = riivo_disc;
+    DCFlushRange((void *)*mem1, align_up(mem1_orig - *mem1, 32));
+    ICInvalidateRange((void *)*mem1, align_up(mem1_orig - *mem1, 32));
+
+    mxmlDelete(xml_top);
+    fclose(xml_file);
 }
 
-void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, void *bi2_dest, u32 mem1_hi, u32 mem2_hi)
+/**
+ * Patches the DVD functions in the game DOL to immediately jump to custom DVD functions implemented in runtime-ext.
+ * Also allocates trampolines containing the first 4 overwritten instructions + backjump to the original function,
+ * which is called when the custom function wants to call the original DVD function.
+ */
+static void patch_dvd_functions(struct rrc_dol *dol)
 {
-    // Patch convert_to_entry
     struct function_patch_entry
     {
+        // Address of the function to patch.
         u32 addr;
+        // Instructions to write at the end of the trampoline. This will jump back to the original DVD function + 16 (4 instructions).
         u32 backjmp_to_original[4];
+        // Instructions to overwrite the start of the original DVD function with. This will jump to the custom function.
         u32 jmp_to_custom[4];
     };
 
     struct function_patch_entry entries[] = {
-        // DVD::ConvertPathToEntrynum
-        {.addr = 0x8015df4c, .backjmp_to_original = {0x3d208015, 0x6129df5c, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208178, 0x61292e60, 0x7d2903a6, 0x4e800420}},
-        // DVD::FastOpen
-        {.addr = 0x8015e254, .backjmp_to_original = {0x3d208015, 0x6129e264, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208178, 0x61292ee0, 0x7d2903a6, 0x4e800420}},
-        // DVD::Open
-        {.addr = 0x8015e2bc, .backjmp_to_original = {0x3d208015, 0x6129e2cc, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208178, 0x61292ea0, 0x7d2903a6, 0x4e800420}},
-        // DVD::ReadPrio
-        {.addr = 0x8015e834, .backjmp_to_original = {0x3d208015, 0x6129e844, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208178, 0x61292f20, 0x7d2903a6, 0x4e800420}},
-        // DVD::Close
-        {.addr = 0x8015e568, .backjmp_to_original = {0x3d208015, 0x6129e578, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208178, 0x61292f60, 0x7d2903a6, 0x4e800420}},
+        {.addr = RRC_DVD_CONVERT_PATH_TO_ENTRYNUM, .backjmp_to_original = {0x3d208015, 0x6129df5c, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208178, 0x61292e60, 0x7d2903a6, 0x4e800420}},
+        {.addr = RRC_DVD_FAST_OPEN, .backjmp_to_original = {0x3d208015, 0x6129e264, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208178, 0x61292ee0, 0x7d2903a6, 0x4e800420}},
+        {.addr = RRC_DVD_OPEN, .backjmp_to_original = {0x3d208015, 0x6129e2cc, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208178, 0x61292ea0, 0x7d2903a6, 0x4e800420}},
+        {.addr = RRC_DVD_READ_PRIO, .backjmp_to_original = {0x3d208015, 0x6129e844, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208178, 0x61292f20, 0x7d2903a6, 0x4e800420}},
+        {.addr = RRC_DVD_CLOSE, .backjmp_to_original = {0x3d208015, 0x6129e578, 0x7d2903a6, 0x4e800420}, .jmp_to_custom = {0x3d208178, 0x61292f60, 0x7d2903a6, 0x4e800420}},
     };
 
     for (u32 i = 0; i < RRC_DOL_SECTION_COUNT; i++)
@@ -403,21 +408,28 @@ void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, voi
                 u32 addr_section_offset = target_addr - section_addr;
                 u32 *virt_target = (void *)((u32)dol + section_offset + addr_section_offset);
 
-                // 32 bytes (4 instructions for the backjmp + 4 overwritten instructions restored) per patched function
-                u32 hooked_addr = 0x93400000 + (j * 32);
+                // 32 bytes (4 instructions for the backjmp + 4 overwritten instructions restored) per patched function.
+                // This is the start of the trampoline.
+                u32 *hooked_addr = (u32 *)(0x93400000 + (j * 32));
 
-                memcpy((void *)hooked_addr, virt_target, 16);
-                memcpy((void *)(hooked_addr + 16), entry.backjmp_to_original, 16);
-                DCFlushRange((void *)hooked_addr, 32);
-                ICInvalidateRange((void *)hooked_addr, 32);
+                // Prepare the trampoline: copy the first 4 instructions of the original function that we're about to overwrite to the start,
+                // and append the `backjmp_to_original` instructions.
+                memcpy(hooked_addr, virt_target, 16);
+                memcpy(hooked_addr + 4, entry.backjmp_to_original, 16);
+                DCFlushRange(hooked_addr, 32);
+                ICInvalidateRange(hooked_addr, 32);
 
+                // Overwrite the original function with a jump to the custom DVD function.
                 memcpy(virt_target, entry.jmp_to_custom, 16);
-                DCFlushRange((void *)virt_target, 32);
-                ICInvalidateRange((void *)virt_target, 32);
+                DCFlushRange(virt_target, 32);
+                ICInvalidateRange(virt_target, 32);
             }
         }
     }
+}
 
+static void load_pulsar_loader(struct rrc_dol *dol)
+{
     RRC_ASSERTEQ(dol->section_addr[0], 0x80004000, "addr");
     u8 *pul_dest = (u8 *)((u32)dol + dol->section[0]);
     u8 *original_pul_dest = pul_dest;
@@ -432,7 +444,74 @@ void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, voi
     DCFlushRange(original_pul_dest, align_up(pul_dest - original_pul_dest, 32));
     ICInvalidateRange(original_pul_dest, align_up(pul_dest - original_pul_dest, 32));
 
-    rrc_loader_load_runtime_ext();
+    fclose(loader_pul_file);
+}
+
+static void load_runtime_ext()
+{
+    FILE *patch_file = fopen("runtime-ext.dol", "r");
+    RRC_ASSERT(patch_file != NULL, "patch file");
+    struct rrc_dol patch_dol __attribute__((aligned(32)));
+
+    int read = fread((void *)&patch_dol, sizeof(patch_dol), 1, patch_file);
+    RRC_ASSERTEQ(read, 1, "read dol");
+
+    for (int i = 0; i < patch_dol.bss_size; i++)
+        *(u8 *)(patch_dol.bss_addr + i) = 0;
+
+    DCFlushRange((void *)align_down(patch_dol.bss_addr, 32), align_up(patch_dol.bss_size, 32));
+    ICInvalidateRange((void *)align_down(patch_dol.bss_addr, 32), align_up(patch_dol.bss_size, 32));
+
+    for (int i = 0; i < RRC_DOL_SECTION_COUNT; i++)
+    {
+        u32 sec = patch_dol.section[i];
+        u32 sec_addr = patch_dol.section_addr[i];
+        u32 sec_size = patch_dol.section_size[i];
+        if (sec_addr == 0)
+            continue;
+
+        if (sec_addr + sec_size > 0x817fffff)
+        {
+            RRC_FATAL("section %d overflows MEM1: %x + %x > 0x817fffff", i, sec_addr, sec_size);
+        }
+
+        fseek(patch_file, sec, SEEK_SET);
+        read = fread((void *)sec_addr, sec_size, 1, patch_file);
+        DCFlushRange((void *)align_down(sec_addr, 32), align_up(sec_size + 32, 32));
+        ICInvalidateRange((void *)align_down(sec_addr, 32), align_up(sec_size + 32, 32));
+        RRC_ASSERTEQ(read, 1, "fully read section");
+    }
+}
+
+typedef void (*patch_dol_func_t)(struct rrc_dol *, struct rrc_riivo_memory_patch *, int, void (*)(void *, u32), void (*)(void *, u32));
+
+/**
+ * Wrapper function around `patch_dol` that sets up the stack pointer to a safe location (workaround for missing support for __attribute__((naked))).
+ */
+void patch_dol_helper(
+    /* r3 */ struct rrc_dol *dol,
+    /* r4 */ struct rrc_riivo_memory_patch *mem_patches,
+    /* r5 */ int mem_patch_count,
+    /* r6 */ void (*ic_invalidate_range)(void *, u32),
+    /* r7 */ void (*dc_flush_range)(void *, u32),
+    /* r8 */ patch_dol_func_t);
+
+asm("patch_dol_helper:\n"
+    // Adjust the stack pointer to 0x808ffa00 (arbitrary, temporary, random safe address not used by game sections)
+    // so we don't overwrite local variables while copying sections.
+    "lis 9, -32625\n"
+    "ori 9, 9, 64000\n"
+    "mr 1,9\n"
+    // Jump to the function in r8 (patch_dol). All other arguments are already in the right registers (r3-r7).
+    "mtctr 8\n"
+    "bctrl\n");
+
+void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, void *bi2_dest, u32 mem1_hi, u32 mem2_hi)
+{
+    patch_dvd_functions(dol);
+    load_pulsar_loader(dol);
+    load_runtime_ext();
+
     struct rrc_riivo_memory_patch *mem_patches;
     int mem_patches_count;
     parse_riivo_patches(settings, &mem1_hi, &mem2_hi, &mem_patches, &mem_patches_count);
@@ -479,12 +558,14 @@ void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, voi
 
     rrc_con_update("Patch and Launch Game", 75);
 
+    wiisocket_deinit();
+
     // The last step is to copy the sections from the safe space to where they actually need to be.
     // This requires copying the function itself to the safe address space so we don't overwrite ourselves.
     // It also needs to call `DCFlushRange` but cannot reference it in the function, so we copy it and pass it as a function pointer.
     // See patch.c comment for a more detailed explanation.
 
-    void (*patch_copy)(struct rrc_dol *, struct rrc_riivo_memory_patch *, int, void (*)(void *, u32), void (*)(void *, u32)) = (void *)RRC_PATCH_COPY_ADDRESS;
+    patch_dol_func_t patch_copy = (void *)RRC_PATCH_COPY_ADDRESS;
 
     memcpy(patch_copy, patch_dol, PATCH_DOL_LEN);
     DCFlushRange(patch_copy, align_up(PATCH_DOL_LEN, 32));
@@ -508,44 +589,11 @@ void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, voi
 
     IRQ_Disable();
 
-    // Set the stack pointer to the safe address space so we don't overwrite local variables when copying sections.
-    u32 new_sp = 0x808ffa00;
-    asm volatile("mr 1, %0" : : "r"(new_sp) : "memory");
-    patch_copy(dol, mem_patches, mem_patches_count, ic_invalidate_range, dc_flush_range);
-}
-
-void rrc_loader_load_runtime_ext()
-{
-    FILE *patch_file = fopen("runtime-ext.dol", "r");
-    RRC_ASSERT(patch_file != NULL, "patch file");
-    struct rrc_dol patch_dol __attribute__((aligned(32)));
-
-    int read = fread((void *)&patch_dol, sizeof(patch_dol), 1, patch_file);
-    RRC_ASSERTEQ(read, 1, "read dol");
-
-    for (int i = 0; i < patch_dol.bss_size; i++)
-        *(u8 *)(patch_dol.bss_addr + i) = 0;
-
-    DCFlushRange((void *)align_down(patch_dol.bss_addr, 32), align_up(patch_dol.bss_size, 32));
-    ICInvalidateRange((void *)align_down(patch_dol.bss_addr, 32), align_up(patch_dol.bss_size, 32));
-
-    for (int i = 0; i < RRC_DOL_SECTION_COUNT; i++)
-    {
-        u32 sec = patch_dol.section[i];
-        u32 sec_addr = patch_dol.section_addr[i];
-        u32 sec_size = patch_dol.section_size[i];
-        if (sec_addr == 0)
-            continue;
-
-        if (sec_addr + sec_size > 0x817fffff)
-        {
-            RRC_FATAL("section %d overflows MEM1: %x + %x > 0x817fffff", i, sec_addr, sec_size);
-        }
-
-        fseek(patch_file, sec, SEEK_SET);
-        read = fread((void *)sec_addr, sec_size, 1, patch_file);
-        DCFlushRange((void *)align_down(sec_addr, 32), align_up(sec_size + 32, 32));
-        ICInvalidateRange((void *)align_down(sec_addr, 32), align_up(sec_size + 32, 32));
-        RRC_ASSERTEQ(read, 1, "fully read section");
-    }
+    patch_dol_helper(
+        dol,
+        mem_patches,
+        mem_patches_count,
+        ic_invalidate_range,
+        dc_flush_range,
+        patch_copy);
 }

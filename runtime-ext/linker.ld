@@ -1,4 +1,13 @@
 SECTIONS {
+    # .init, .text and .rodata are specified in Makefile LDFLAGS
+    .dvd_convert_path_to_entrynum 0x81782e60 : { *(.dvd_convert_path_to_entrynum) }
+    .dvd_open                     0x81782ea0 : { *(.dvd_open) }
+    .dvd_fast_open                0x81782ee0 : { *(.dvd_fast_open) }
+    .dvd_read_prio                0x81782f20 : { *(.dvd_read_prio) }
+    .dvd_close                    0x81782f60 : { *(.dvd_close) }
+    .riivo_disc_ptr               0x81782fa0 : { *(.riivo_disc_ptr) }
+
+    # Functions provided by the game
     PROVIDE(__lcase = 0x80246320);
     PROVIDE(__ucase = 0x80246420);
     PROVIDE(OSUTF8to32 = 0x801ab410);
@@ -11,8 +20,7 @@ SECTIONS {
     PROVIDE(VIWaitForRetrace = 0x801b99ec);
     PROVIDE(OS_Report = 0x801A25D0);
     PROVIDE(OS_Fatal = 0x801A4EC4);
-
-    # MAP.txt provided
+    PROVIDE(msleep = 0x800f2510);
     PROVIDE(snprintf = 0x80011938);
     PROVIDE(iosCreateHeap = 0x801949b8);
     PROVIDE(iosAlloc = 0x80194ae8);
