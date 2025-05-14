@@ -17,7 +17,7 @@ include $(DEVKITPPC)/wii_rules
 #---------------------------------------------------------------------------------
 TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
-SOURCES		:=	source brainslug-wii/modules/libfat brainslug-wii/modules/libfat-sd brainslug-wii/modules/libsd
+SOURCES		:=	source vendor/libfat vendor/libfat-sd vendor/libsd
 DATA		:=	data
 INCLUDES	:=  
 #---------------------------------------------------------------------------------
@@ -40,7 +40,7 @@ LIBS	:= -logc -lm
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:= $(DEVKITPRO)/portlibs/wii $(DEVKITPRO)/portlibs/ppc $(DEVKITPRO)/libogc $(DEVKITPRO)/bslug
+LIBDIRS	:= $(DEVKITPRO)/portlibs/wii $(DEVKITPRO)/portlibs/ppc $(DEVKITPRO)/bslug
 
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional

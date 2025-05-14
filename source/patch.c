@@ -40,8 +40,7 @@
  */
 
 #include <stdint.h>
-#include "dol.h"
-#include "riivo.h"
+#include "patch.h"
 
 void patch_dol(struct rrc_dol *dol, struct rrc_riivo_memory_patch *mem_patches, int mem_patch_count, void (*ic_invalidate_range)(void *, u32), void (*dc_flush_range)(void *, u32))
 {

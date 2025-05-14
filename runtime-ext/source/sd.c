@@ -21,10 +21,10 @@
 #include <gctypes.h>
 #include <fcntl.h>
 #include "util.h"
-#include "../brainslug-wii/bslug_include/io/fat.h"
-#include "../brainslug-wii/bslug_include/io/fat-sd.h"
-#include "../brainslug-wii/bslug_include/stdio.h"
-#include "../brainslug-wii/bslug_include/errno.h"
+#include "io/fat.h"
+#include "io/fat-sd.h"
+#include "stdio.h"
+#include "errno.h"
 
 s32 rrc_rt_sd_init()
 {

@@ -21,8 +21,8 @@
 #define RRC_PATCH_H
 
 #include <gctypes.h>
-#include "dol.h"
-#include "riivo.h"
+#include "../shared/dol.h"
+#include "../shared/riivo.h"
 
 void patch_dol(
     struct rrc_dol *dol,

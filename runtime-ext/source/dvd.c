@@ -23,11 +23,11 @@
 #include "sd.h"
 #include "dvd.h"
 #include "util.h"
-#include "../brainslug-wii/bslug_include/io/fat.h"
-#include "../brainslug-wii/bslug_include/io/fat-sd.h"
-#include "../brainslug-wii/bslug_include/stdio.h"
-#include "../brainslug-wii/bslug_include/rvl/cache.h"
-#include "../../source/riivo.h"
+#include "io/fat.h"
+#include "io/fat-sd.h"
+#include "stdio.h"
+#include "rvl/cache.h"
+#include "../../shared/riivo.h"
 
 /**
  * Contains all <file> and <folder> replacements. Initialized in the launcher DOL based on the XML.

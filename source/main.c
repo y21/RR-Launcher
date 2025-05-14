@@ -35,7 +35,8 @@
 #include "di.h"
 #include "time.h"
 #include "loader.h"
-#include "dol.h"
+#include "../shared/dol.h"
+#include "../shared/riivo.h"
 #include "console.h"
 #include "settings.h"
 #include "update/versionsfile.h"
@@ -43,7 +44,6 @@
 #include "prompt.h"
 #include "gui.h"
 #include "res.h"
-#include "riivo.h"
 #include "settingsfile.h"
 #include <setjmp.h>
 #include <ogc/isfs.h>

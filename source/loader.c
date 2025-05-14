@@ -29,7 +29,7 @@
 #include "loader.h"
 #include "res.h"
 #include "console.h"
-#include "riivo.h"
+#include "../shared/riivo.h"
 #include "util.h"
 #include <mxml.h>
 #include <wiisocket.h>
