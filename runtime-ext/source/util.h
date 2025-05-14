@@ -26,23 +26,23 @@ void OS_Report(const char *, ...);
 void OS_Fatal(u32 *, u32 *, const char *);
 
 #ifndef DEBUG
-#define RTE_DBG_OS_Report(...)
+#define RTE_DBG(...)
 #endif
 
 #ifdef DEBUG
-#define RTE_DBG_OS_Report OS_Report
+#define RTE_DBG OS_Report
 #endif
 
-// TODO: can we make this support printf-style formatting?
-#define RTE_FATAL(msg)                   \
-    do                               \
-    {                                \
-        u32 fg = 0xFFFFFFFF, bg = 0; \
-        OS_Fatal(&fg, &bg, msg);     \
-        while (1)                    \
-            ;                        \
+#define RTE_FATAL(...)                           \
+    do                                           \
+    {                                            \
+        u32 fg = 0xFFFFFFFF, bg = 0;             \
+        char buf[128];                           \
+        snprintf(buf, sizeof(buf), __VA_ARGS__); \
+        OS_Fatal(&fg, &bg, buf);                 \
+        while (1)                                \
+            ;                                    \
     } while (0);
-
 
 #define RTE_STRINGIFY(x) #x
 

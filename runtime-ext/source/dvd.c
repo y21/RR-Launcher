@@ -24,6 +24,7 @@
 #include "dvd.h"
 #include "util.h"
 #include "io/fat.h"
+#include "errno.h"
 #include "io/fat-sd.h"
 #include "stdio.h"
 #include "rvl/cache.h"
@@ -157,6 +158,7 @@ static bool rte_dvd_resolve_path_to_entry_num(const char *filename, s32 *entry_n
         {
         case RRC_RIIVO_FILE_REPLACEMENT:
         {
+            // Trim leading slashes from either path.
             const char *disc_path = replacement->disc;
             if (*disc_path == '/')
             {
@@ -172,7 +174,7 @@ static bool rte_dvd_resolve_path_to_entry_num(const char *filename, s32 *entry_n
             {
                 if (rrc_rt_sd_file_exists(replacement->external))
                 {
-                    RTE_DBG_OS_Report("Found a file replacement! %d (%s)\n", i, disc_path);
+                    RTE_DBG("Found a file replacement! %d (%s)\n", i, disc_path);
                     *entry_num = rte_dvd_path_to_entrynum(replacement->external);
                     return true;
                 }
@@ -192,6 +194,12 @@ static bool rte_dvd_resolve_path_to_entry_num(const char *filename, s32 *entry_n
                 break;
             }
 
+            // Check if this folder path is a prefix of the given filename (`matches`),
+            // and if it is, find the "split" point at which they differ (`fi`). Example:
+            // Game requests "Assets/RaceAssets.szs", folder replacement is "/Assets" -> "/CustomAssets".
+            // This matches (despite a leading / in only one of the paths), and `fi` is the index of the `/`.
+            // Everything after that index is append to the external path: "/CustomAssets" + "/RaceAssets.szs"
+            // is resolved to "/CustomAssets/RaceAssets.szs".
             bool matches = true;
             int fi = 0;
             for (int di = 0; di < disc_len; di++)
@@ -210,20 +218,18 @@ static bool rte_dvd_resolve_path_to_entry_num(const char *filename, s32 *entry_n
                 fi++;
             }
 
-            RTE_DBG_OS_Report("Found folder rename: '%s' == '%s' -> %d %d\n", disc_path, filename, matches, fi);
+            RTE_DBG("Found folder rename: '%s' == '%s' -> %d %d\n", disc_path, filename, matches, fi);
 
             if (matches)
             {
-                // It matches. Let's see if the file actually exists in the directory.
-                struct stat st;
-
+                // The folder replacement path matches. Let's see if the file actually exists in the directory.
                 char new_path[64];
                 char *path_ptr = new_path;
                 strncpy(new_path, external_path, 64);
                 path_ptr += external_len;
                 if (filename[fi] != '/' && external_path[external_len - 1] != '/')
                 {
-                    // Add a /
+                    // Add a / if there isn't already one that would separate the two paths.
                     *path_ptr = '/';
                     path_ptr++;
                 }
@@ -231,13 +237,13 @@ static bool rte_dvd_resolve_path_to_entry_num(const char *filename, s32 *entry_n
 
                 if (rrc_rt_sd_file_exists(new_path))
                 {
-                    RTE_DBG_OS_Report("Found a folder replacement! %d (%s %s %s %s)\n", i, disc_path, external_path, filename, new_path);
+                    RTE_DBG("Found a folder replacement! %d (%s %s %s %s)\n", i, disc_path, external_path, filename, new_path);
                     *entry_num = rte_dvd_path_to_entrynum(new_path);
                     return true;
                 }
                 else
                 {
-                    RTE_DBG_OS_Report("NOTE: %s not applied because it doesn't exist.\n", disc_path);
+                    RTE_DBG("NOTE: %s not applied because it doesn't exist.\n", disc_path);
                 }
             }
 
@@ -258,7 +264,7 @@ static void rte_dvd_open_entry_num(s32 entry_num, FileInfo *file_info)
 
     if (etp->file.sd_fd != 0)
     {
-        RTE_DBG_OS_Report("FastOpen: reusing fd %d\n", etp->file.sd_fd);
+        RTE_DBG("FastOpen: reusing fd %d\n", etp->file.sd_fd);
         file_info->startAddr = SPECIAL_ENTRYNUM | entry_num;
         file_info->length = etp->file.opened_file->file_struct.filesize;
         etp->file.opened_file->refcount++;
@@ -268,7 +274,7 @@ static void rte_dvd_open_entry_num(s32 entry_num, FileInfo *file_info)
         struct rte_open_file *file = rte_dvd_alloc_open_file();
 
         int fd = SD_open(&file->file_struct, etp->path, O_RDONLY);
-        RTE_DBG_OS_Report("Open path '%s', fd = %d\n", etp->path, fd);
+        RTE_DBG("Open path '%s', fd = %d\n", etp->path, fd);
 
         if (fd == -1)
         {
@@ -301,12 +307,12 @@ __attribute__((noinline))
 s32
 custom_convert_path_to_entry_num_impl(const char *filename)
 {
-    RTE_DBG_OS_Report("ConvertPathToEntrynum(%s)\n", filename);
+    RTE_DBG("ConvertPathToEntrynum(%s)\n", filename);
 
     s32 entry_num;
     if (rte_dvd_resolve_path_to_entry_num(filename, &entry_num))
     {
-        RTE_DBG_OS_Report("Found entrynum replacement: %d\n", entry_num);
+        RTE_DBG("Found entrynum replacement: %d\n", entry_num);
         return SPECIAL_ENTRYNUM | entry_num;
     }
 
@@ -315,8 +321,7 @@ custom_convert_path_to_entry_num_impl(const char *filename)
     s32 res = cb(filename);
     if ((res & SPECIAL_ENTRYNUM_MASK) == SPECIAL_ENTRYNUM)
     {
-        RTE_DBG_OS_Report("Res = %d\n", res);
-        RTE_FATAL("DVD Convert path returned special entry");
+        RTE_FATAL("DVD Convert path returned special entry (%d)", res);
     }
     else
     {
@@ -328,7 +333,7 @@ __attribute__((noinline))
 s32
 custom_open_impl(const char *path, FileInfo *file_info)
 {
-    RTE_DBG_OS_Report("Open(%s)\n", path);
+    RTE_DBG("Open(%s)\n", path);
 
     s32 entry_num;
     if (rte_dvd_resolve_path_to_entry_num(path, &entry_num))
@@ -340,7 +345,7 @@ custom_open_impl(const char *path, FileInfo *file_info)
 
     s32 (*cb)(const char *, FileInfo *) = (void *)DVD_OPEN;
     s32 res = cb(path, file_info);
-    RTE_DBG_OS_Report("Default DVD Open (%d) address: %d\n", res, file_info->startAddr);
+    RTE_DBG("Default DVD Open (%d) address: %d\n", res, file_info->startAddr);
     return res;
 }
 
@@ -348,7 +353,7 @@ __attribute__((noinline))
 s32
 custom_fast_open_impl(s32 entry_num, FileInfo *file_info)
 {
-    RTE_DBG_OS_Report("FastOpen(%d)\n", entry_num);
+    RTE_DBG("FastOpen(%d)\n", entry_num);
 
     if ((entry_num & SPECIAL_ENTRYNUM_MASK) == SPECIAL_ENTRYNUM)
     {
@@ -361,7 +366,7 @@ custom_fast_open_impl(s32 entry_num, FileInfo *file_info)
     s32 res = cb(entry_num, file_info);
     if (res != -1 && (file_info->startAddr & SPECIAL_ENTRYNUM_MASK) == SPECIAL_ENTRYNUM)
     {
-        RTE_FATAL("Normal FastOpen() returned special bitpattern");
+        RTE_FATAL("Normal FastOpen() returned special bitpattern (%d)", res);
     }
     return res;
 }
@@ -370,7 +375,7 @@ __attribute__((noinline))
 s32
 custom_read_prio_impl(FileInfo *file_info, void *buffer, s32 length, s32 offset, s32 prio)
 {
-    RTE_DBG_OS_Report("ReadPrio(%x, %d, %d) (startAddr=%d,size=%d)\n", buffer, length, offset, file_info->startAddr, file_info->length);
+    RTE_DBG("ReadPrio(%x, %d, %d) (startAddr=%d,size=%d)\n", buffer, length, offset, file_info->startAddr, file_info->length);
 
     if ((file_info->startAddr & SPECIAL_ENTRYNUM_MASK) == SPECIAL_ENTRYNUM)
     {
@@ -389,17 +394,16 @@ custom_read_prio_impl(FileInfo *file_info, void *buffer, s32 length, s32 offset,
 
         if (SD_seek(etp->file.sd_fd, offset, 0) == -1)
         {
-            RTE_FATAL("ReadPrio: Failed to seek!\n");
+            RTE_FATAL("ReadPrio: Failed to seek (%d)\n", errno);
         }
 
         int bytes = SD_read(etp->file.sd_fd, buffer, length);
         if (bytes == -1)
         {
-            RTE_FATAL("ReadPrio: failed to read bytes in ReadPrio!");
+            RTE_FATAL("ReadPrio: failed to read bytes in ReadPrio (%d)", errno);
         }
 
         DCFlushRange(buffer, align_up(length, 32));
-        // TODO: check if this is necessary?
         ICInvalidateRange(buffer, align_up(length, 32));
         return bytes;
     }
@@ -411,7 +415,7 @@ custom_read_prio_impl(FileInfo *file_info, void *buffer, s32 length, s32 offset,
 __attribute__((noinline)) bool
 custom_close_impl(FileInfo *file_info)
 {
-    RTE_DBG_OS_Report("Close(%d)\n", file_info->startAddr);
+    RTE_DBG("Close(%d)\n", file_info->startAddr);
 
     if ((file_info->startAddr & SPECIAL_ENTRYNUM_MASK) == SPECIAL_ENTRYNUM)
     {
@@ -440,7 +444,7 @@ custom_close_impl(FileInfo *file_info)
         {
             if (SD_close(etp->file.sd_fd) == -1)
             {
-                RTE_FATAL("Failed to close SD file due to SD error!");
+                RTE_FATAL("Failed to close SD file due to SD error (%d)", errno);
             }
 
             etp->file.sd_fd = 0;

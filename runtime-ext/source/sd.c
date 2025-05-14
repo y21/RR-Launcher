@@ -57,7 +57,7 @@ bool rrc_rt_sd_file_exists(const char *path)
     s32 tmpfd = SD_open(&fs, path, O_RDONLY);
     if (tmpfd != -1)
     {
-        RTE_DBG_OS_Report("DEBUG: File size of %s: %d\n", path, fs.filesize);
+        RTE_DBG("DEBUG: File size of %s: %d\n", path, fs.filesize);
         SD_close(tmpfd);
         return true;
     }

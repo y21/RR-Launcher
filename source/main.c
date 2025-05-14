@@ -78,7 +78,7 @@ int main(int argc, char **argv)
 
     void *xfb;
     // init video, setup console framebuffer
-    rrc_gui_xfb_alloc(&xfb, true);
+    rrc_gui_xfb_alloc(&xfb, false);
     rrc_gui_display_con(xfb, true);
     rrc_gui_display_banner(xfb);
 
@@ -227,16 +227,16 @@ interrupt_loop_end:
     res = rrc_di_read(dol, sizeof(struct rrc_dol), data_header->dol_offset);
     RRC_ASSERTEQ(res, RRC_DI_LIBDI_OK, "rrc_di_read for dol");
 
-    SYS_Report("Entrypoint at %x\n", dol->entry_point);
-    SYS_Report("BSS Addr: %x\n", dol->bss_addr);
-    SYS_Report("BSS size: %d\n", dol->bss_size);
+    rrc_dbg_printf("Entrypoint at %x\n", dol->entry_point);
+    rrc_dbg_printf("BSS Addr: %x\n", dol->bss_addr);
+    rrc_dbg_printf("BSS size: %d\n", dol->bss_size);
     for (u32 i = 0; i < RRC_DOL_SECTION_COUNT; i++)
     {
         if (dol->section_size[i] == 0)
         {
             continue;
         }
-        SYS_Report("%x at %x-%x (%d b)\n", dol->section[i], dol->section_addr[i], dol->section_addr[i] + dol->section_size[i], dol->section_size[i]);
+        rrc_dbg_printf("%x at %x-%x (%d b)\n", dol->section[i], dol->section_addr[i], dol->section_addr[i] + dol->section_size[i], dol->section_size[i]);
         if ((dol->section_addr[i] < 0x80000000) || (dol->section_addr[i] + dol->section_size[i] > 0x90000000))
         {
             RRC_FATAL("Invalid section address: %x", dol->section_addr[i]);
@@ -252,7 +252,7 @@ interrupt_loop_end:
 
     rrc_con_update("Initialise DVD: Read Filesystem Table", 50);
 
-    SYS_Report("mem1 hi: %x, mem2 hi %x\n", mem1_hi, mem2_hi);
+    rrc_dbg_printf("mem1 hi: %x, mem2 hi %x\n", mem1_hi, mem2_hi);
 
     u32 fst_size = data_header->fst_size << 2;
     u32 fst_dest = align_down(mem1_hi - fst_size, 32);

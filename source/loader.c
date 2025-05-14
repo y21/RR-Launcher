@@ -242,11 +242,6 @@ static void parse_riivo_patches(struct rrc_settingsfile *settings, u32 *mem1, u3
     // Just always enable the pack, there is no setting for this.
     append_patches_for_option(xml_top, options_index, "Pack", RRC_SETTINGSFILE_PACK_ENABLED_VALUE, active_patches, &active_patches_count);
 
-    for (int i = 0; i < active_patches_count; i++)
-    {
-        SYS_Report("[DEBUG] Patch enabled: %s\n", active_patches[i]);
-    }
-
     // TODO: handle savegame option?
 
     // Iterate through <patch> elements.
@@ -330,7 +325,7 @@ static void parse_riivo_patches(struct rrc_settingsfile *settings, u32 *mem1, u3
                 {
                     // Loader.pul specifically is handled manually elsewhere, so make an exception for this.
                     // Do make sure that the address is what we've hardcoded, though.
-                    RRC_ASSERTEQ(strtoul(addr_mxml, NULL, 16), 0x80004000, "Loader.pul patch address is not 0x80000000");
+                    RRC_ASSERTEQ((u32)strtoul(addr_mxml, NULL, 16), 0x80004000, "Loader.pul patch address is not 0x80000000");
                     continue;
                 }
 
@@ -515,13 +510,6 @@ void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, voi
     struct rrc_riivo_memory_patch *mem_patches;
     int mem_patches_count;
     parse_riivo_patches(settings, &mem1_hi, &mem2_hi, &mem_patches, &mem_patches_count);
-
-    for (int i = 0; i < mem_patches_count; i++)
-    {
-        struct rrc_riivo_memory_patch *patch = &mem_patches[i];
-        SYS_Report("[DEBUG] Memory patch: %08x -> %08x (original: %08x)\n",
-                   patch->addr, patch->value, patch->original);
-    }
 
     rrc_con_update("Prepare For Patching: Patch Memory Map", 65);
 
