@@ -1,6 +1,6 @@
 /* main.c
  *   by Alex Chadwick
- * 
+ *
  * Copyright (C) 2014, Alex Chadwick
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -29,52 +29,47 @@
 #include <rvl/OSMutex.h>
 #include <stdbool.h>
 
-BSLUG_MODULE_GAME("????");
-BSLUG_MODULE_NAME("libfat-sd");
-BSLUG_MODULE_VERSION("v1.0");
-BSLUG_MODULE_AUTHOR("Chadderz");
-BSLUG_MODULE_LICENSE("BSD");
-
-BSLUG_EXPORT(sd_partition);
 PARTITION sd_partition;
 
-
-BSLUG_EXPORT(SD_Mount);
-int SD_Mount(void) {
+int SD_Mount(void)
+{
     static uint8_t sd_cache[512 * 8 * 64];
     static OSMutex_t init_mutex;
     static bool hasInit = false;
-    
+
     if (hasInit)
         return 0;
-        
+
     OSLockMutex(&init_mutex);
-    if (hasInit) {
+    if (hasInit)
+    {
         OSUnlockMutex(&init_mutex);
         return 0;
     }
-    if (init_mutex.lock_count > 1) {
+    if (init_mutex.lock_count > 1)
+    {
         /* we have a cycle somewhere in the modules; abort this attempt. */
         OSUnlockMutex(&init_mutex);
         errno = EDEADLK;
         return -1;
     }
-    
+
     if (!__io_wiisd.startup())
         goto exit_error;
-    
+
     if (FAT_partition_constructor(
-        &__io_wiisd, &sd_partition, sd_cache, sizeof(sd_cache), 0) == NULL) {
-     
+            &__io_wiisd, &sd_partition, sd_cache, sizeof(sd_cache), 0) == NULL)
+    {
+
         __io_wiisd.shutdown();
         goto exit_error;
     }
-    
+
     hasInit = true;
 
 exit_error:
     OSUnlockMutex(&init_mutex);
-    
+
     if (hasInit)
         return 0;
     return -1;
