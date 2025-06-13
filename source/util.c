@@ -58,3 +58,13 @@ void rrc_invalidate_cache(void *addr, u32 size)
     DCFlushRange(addr, size);
     ICInvalidateRange(addr, size);
 }
+
+bool rrc_is_dolphin()
+{
+    s32 fd = IOS_Open("/dev/dolphin", 0);
+    if (fd >= 0)
+    {
+        IOS_Close(fd);
+    }
+    return fd >= 0;
+}

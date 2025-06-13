@@ -36,6 +36,6 @@ enum rrc_settings_result
 
     Note that if `result' is an error type, the return value is RRC_SETTINGS_ERROR.
 */
-enum rrc_settings_result rrc_settings_display(void *xfb, struct rrc_settingsfile *stored_settings, struct rrc_result *result);
+enum rrc_settings_result rrc_settings_display(void *xfb, struct rrc_settingsfile *stored_settings, struct rrc_result *result, char region);
 
 #endif

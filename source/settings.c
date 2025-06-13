@@ -33,6 +33,7 @@
 #include <mxml.h>
 #include <gccore.h>
 #include "pad.h"
+#include "transfer/sd2nand.h"
 
 enum settings_entry_type
 {
@@ -78,8 +79,8 @@ static char *changes_not_saved_status = RRC_CON_ANSI_BG_BRIGHT_RED "Error saving
 static char *my_stuff_label = "My Stuff";
 static char *savegame_label = "Separate savegame";
 static char *autoupdate_label = "Automatic updates";
-
 static char *perform_updates_label = "Perform updates";
+static char *save_transfer_label = "Transfer Dolphin Save";
 
 static char *manage_channel_installation_label = "Manage channel installation";
 
@@ -155,7 +156,7 @@ static bool prompt_save_unsaved_changes(void *xfb, const struct settings_entry *
     mxmlDelete(xml_top);    \
     fclose(xml_file);
 
-enum rrc_settings_result rrc_settings_display(void *xfb, struct rrc_settingsfile *stored_settings, struct rrc_result *result)
+enum rrc_settings_result rrc_settings_display(void *xfb, struct rrc_settingsfile *stored_settings, struct rrc_result *result, char region)
 {
     result->errtype = ESOURCE_NONE;
 
@@ -225,6 +226,8 @@ enum rrc_settings_result rrc_settings_display(void *xfb, struct rrc_settingsfile
          .option_count = autoupdate_option_count},
 
         {.type = ENTRY_TYPE_BUTTON, .label = save_label, .margin_top = 1},
+        {.type = ENTRY_TYPE_BUTTON, .label = save_transfer_label},
+        // TODO: actually disable this button on console^
 
         {.type = ENTRY_TYPE_BUTTON, .label = exit_label, .margin_top = 1},
     };
@@ -498,6 +501,27 @@ enum rrc_settings_result rrc_settings_display(void *xfb, struct rrc_settingsfile
 
                     goto exit;
                 }
+                else if (entry->label == save_transfer_label)
+                {
+                    char *lines[] = {
+                        "On Dolphin, this channel saves ghosts to an emulated SD card.",
+                        "This tool can help transfer them to and from the NAND,",
+                        "so that they are accessible as regular files on the host OS.",
+                        "",
+                        "How do you want to transfer files?"};
+                    enum rrc_prompt_result res = rrc_prompt_2_options(xfb, lines, 5, "Import from NAND", "Export to NAND", RRC_PROMPT_RESULT_IMPORT_FROM_NAND, RRC_PROMPT_RESULT_EXPORT_TO_NAND);
+
+                    // TODO: show another prompt if the user is really really sure
+                    switch (res)
+                    {
+                    case RRC_PROMPT_RESULT_EXPORT_TO_NAND:
+                        rrc_sd_to_nand(region);
+                        break;
+                    case RRC_PROMPT_RESULT_IMPORT_FROM_NAND:
+                        // rrc_transfer_nand_to_sd(region);
+                        break;
+                    }
+                };
             }
 
             usleep(RRC_WPAD_LOOP_TIMEOUT);
