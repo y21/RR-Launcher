@@ -52,6 +52,8 @@
 #include "sd.h"
 #include "pad.h"
 
+#include "transfer/sd2nand.h"
+
 /* 100ms */
 #define DISKCHECK_DELAY 100000
 
@@ -229,6 +231,9 @@ int main(int argc, char **argv)
         rrc_result_error_check_error_normal(&update_res, xfb);
     }
 
+    struct rrc_result rrres = rrc_sd_to_nand(region);
+    rrc_result_error_check_error_fatal(&rrres);
+    return 0;
 #define INTERRUPT_TIME 3000000 /* 3 seconds */
     rrc_con_clear(true);
 
@@ -252,7 +257,7 @@ int main(int argc, char **argv)
         else if (rrc_pad_b_pressed(pad))
         {
             struct rrc_result r;
-            int out = rrc_settings_display(xfb, &stored_settings, &r);
+            int out = rrc_settings_display(xfb, &stored_settings, &r, region);
             rrc_result_error_check_error_fatal(&r);
 
             switch (out)
