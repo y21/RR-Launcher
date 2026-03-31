@@ -168,6 +168,12 @@ const char **rrc_riivo_patch_loader_get_entries_in_replaced_folder(u32 *arena, c
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0 || entry->d_type != DT_REG)
             continue;
 
+        if (i >= count) {
+            // Sanity check: readdir() should be "pure" here (always report the same number of files), but let's make sure we never write out of bounds
+            // if weird things happens.
+            RRC_FATAL("read more files in the second pass than in the first pass for '%s'", folder_path);
+        }
+
         char *entry_path = bump_alloc_string(arena, entry->d_name);
         entries[i] = entry_path;
         i++;
