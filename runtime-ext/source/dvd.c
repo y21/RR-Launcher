@@ -32,6 +32,7 @@
 #include "trampoline.h"
 #include <string.h>
 #include <ctype.h>
+#include "profile.h"
 
 /**
  * Contains all <file> and <folder> replacements. Initialized in the launcher DOL based on the XML.
@@ -293,7 +294,7 @@ static bool rte_dvd_resolve_path_to_entry_num(const char *filename, s32 *entry_n
         case RRC_RIIVO_FILE_REPLACEMENT:
         {
             RTE_DBG("Checking file replacement: '%s' == '%s'\n", replacement->disc, "strm");
-            
+
             // Trim leading slashes from either path.
             const char *disc_path = replacement->disc;
             if (*disc_path == '/')
@@ -391,7 +392,7 @@ static bool rte_dvd_resolve_path_to_entry_num(const char *filename, s32 *entry_n
                 bool cached_file_exists = false;
                 for (int i = 0; i < replacement->folder_contents_count; i++)
                 {
-                    // We need to enforce case insensitivity here because FAT is case-insensitive, 
+                    // We need to enforce case insensitivity here because FAT is case-insensitive,
                     // and the folder_contents are populated based on FAT reads.
 
                     to_lowercase((char*) replacement->folder_contents[i]);
@@ -480,12 +481,15 @@ __attribute__((noinline))
 s32
 custom_convert_path_to_entry_num_impl(const char *filename)
 {
+    RTE_PROFILE_START(convert_path_to_entry_num);
+
     RTE_DBG("ConvertPathToEntrynum(%s)\n", filename);
 
     s32 entry_num;
     if (rte_dvd_resolve_path_to_entry_num(filename, &entry_num))
     {
         RTE_DBG("Found entrynum replacement: %d\n", entry_num);
+        RTE_PROFILE_END(convert_path_to_entry_num, filename);
         return SPECIAL_ENTRYNUM | entry_num;
     }
 
@@ -505,6 +509,7 @@ __attribute__((noinline))
 s32
 custom_open_impl(const char *path, FileInfo *file_info)
 {
+    RTE_PROFILE_START(open);
     RTE_DBG("Open(%s)\n", path);
 
     s32 entry_num;
@@ -512,6 +517,7 @@ custom_open_impl(const char *path, FileInfo *file_info)
     {
         rte_dvd_open_entry_num(entry_num, file_info);
         RTE_DBG("Found entrynum replacement: %d (addr %d)\n", entry_num, file_info->startAddr);
+        RTE_PROFILE_END(open, path);
         return 1;
     }
 
@@ -524,11 +530,13 @@ __attribute__((noinline))
 s32
 custom_fast_open_impl(s32 entry_num, FileInfo *file_info)
 {
+    RTE_PROFILE_START(fast_open);
     RTE_DBG("FastOpen(%d)\n", entry_num);
 
     if ((entry_num & SPECIAL_ENTRYNUM_MASK) == SPECIAL_ENTRYNUM)
     {
         rte_dvd_open_entry_num(entry_num & ~SPECIAL_ENTRYNUM_MASK, file_info);
+        RTE_PROFILE_END(fast_open, "");
         return 1;
     }
 
@@ -545,6 +553,7 @@ __attribute__((noinline))
 s32
 custom_read_prio_impl(FileInfo *file_info, void *buffer, s32 length, s32 offset, s32 prio)
 {
+    RTE_PROFILE_START(read_prio);
     RTE_DBG("ReadPrio(%x, %d, %d) (startAddr=%d,size=%d)\n", buffer, length, offset, file_info->startAddr, file_info->length);
 
     if ((file_info->startAddr & SPECIAL_ENTRYNUM_MASK) == SPECIAL_ENTRYNUM)
@@ -575,6 +584,7 @@ custom_read_prio_impl(FileInfo *file_info, void *buffer, s32 length, s32 offset,
 
         DCFlushRange(buffer, align_up(length, 32));
         ICInvalidateRange(buffer, align_up(length, 32));
+        RTE_PROFILE_END(read_prio, "");
         return bytes;
     }
 
@@ -584,6 +594,7 @@ custom_read_prio_impl(FileInfo *file_info, void *buffer, s32 length, s32 offset,
 __attribute__((noinline)) bool
 custom_close_impl(FileInfo *file_info)
 {
+    RTE_PROFILE_START(close);
     RTE_DBG("Close(%d)\n", file_info->startAddr);
 
     if ((file_info->startAddr & SPECIAL_ENTRYNUM_MASK) == SPECIAL_ENTRYNUM)
@@ -619,7 +630,8 @@ custom_close_impl(FileInfo *file_info)
             etp->file.sd_fd = 0;
         }
 
-        return 1;
+        RTE_PROFILE_END(close, "");
+        return true;
     }
 
     // Why this calls DVD_Cancel() instead of DVD_Close() you may wonder?
