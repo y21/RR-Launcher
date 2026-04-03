@@ -25,7 +25,7 @@ GAME_DOL_LOADER := game_dol_loader
 #---------------------------------------------------------------------------------
 TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
-RELEASE     := $(BUILD)/release
+RELEASE     := /home/timo/Downloads/sd
 SOURCES		:=	source source/update source/pngu source/loader
 DATA		:=  data
 TEXTURES	:=	textures
@@ -69,7 +69,7 @@ export OUTPUT	:=	$(CURDIR)/$(TARGET)
 export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
 					$(foreach dir,$(DATA),$(CURDIR)/$(dir)) \
 					$(foreach dir,$(TEXTURES),$(CURDIR)/$(dir))
-					
+
 
 export DEPSDIR	:=	$(CURDIR)/$(BUILD)
 
@@ -137,7 +137,7 @@ release: $(BUILD)
 	# Move files to correct places
 	mkdir -p $(RELEASE)/RetroRewindChannel
 	mkdir -p $(RELEASE)/apps/RetroRewind
-	cp runtime-ext/runtime-ext-* $(RELEASE)/RetroRewindChannel 
+	cp runtime-ext/runtime-ext-* $(RELEASE)/RetroRewindChannel
 	cp $(OUTPUT).dol $(RELEASE)/apps/RetroRewind/boot.dol
 
 #---------------------------------------------------------------------------------

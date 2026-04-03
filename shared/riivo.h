@@ -35,7 +35,7 @@ enum rrc_riivo_disc_replacement_type
 struct rrc_riivo_disc_replacement
 {
     enum rrc_riivo_disc_replacement_type type;
-    /// The replacement path on the SD card. 
+    /// The replacement path on the SD card.
     const char *external;
     /// The path on the disc itself.
     const char *disc;
@@ -51,6 +51,15 @@ struct rrc_riivo_disc
 {
     u32 count;
     struct rrc_riivo_disc_replacement replacements[0];
+};
+
+struct rrc_riivo_file_patch {
+
+};
+
+struct rrc_riivo_disc_v2 {
+    u32 count;
+    struct rrc_riivo_file_patch* file_replacements;
 };
 
 struct rrc_riivo_memory_patch

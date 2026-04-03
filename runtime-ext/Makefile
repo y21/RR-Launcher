@@ -18,7 +18,7 @@ OFILES := $(addprefix build/,$(CFILES:.c=.o))
 INCLUDE := -I../shared -Ivendor -Ivendor/bslug_include
 CFLAGS	:= -nostdlib -mno-eabi -O2 -Wall $(MACHDEP) $(INCLUDE)
 
-LINKERSCRIPTS := $(wildcard linker-*.ld)
+LINKERSCRIPTS := linker-P.ld # $(wildcard linker-*.ld)
 # get region characters
 REGIONS := $(patsubst linker-%.ld, %, $(LINKERSCRIPTS))
 LINKERSCRIPTPARAMS := $(addprefix -T, $(LINKERSCRIPTS))

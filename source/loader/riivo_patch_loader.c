@@ -24,8 +24,11 @@
 #include "loader.h"
 #include "binary_loader.h"
 #include "../sd.h"
+#include <stdio.h>
 #include <sys/dirent.h>
 #include "../time.h"
+#include "ogc/system.h"
+#include "sys/unistd.h"
 
 static char *bump_alloc_string(u32 *arena, const char *src)
 {
@@ -168,12 +171,6 @@ const char **rrc_riivo_patch_loader_get_entries_in_replaced_folder(u32 *arena, c
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0 || entry->d_type != DT_REG)
             continue;
 
-        if (i >= count) {
-            // Sanity check: readdir() should be "pure" here (always report the same number of files), but let's make sure we never write out of bounds
-            // if weird things happens.
-            RRC_FATAL("read more files in the second pass than in the first pass for '%s'", folder_path);
-        }
-
         char *entry_path = bump_alloc_string(arena, entry->d_name);
         entries[i] = entry_path;
         i++;
@@ -187,6 +184,8 @@ const char **rrc_riivo_patch_loader_get_entries_in_replaced_folder(u32 *arena, c
 
 struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings, u32 *mem1, u32 *mem2, struct parse_riivo_output *out)
 {
+
+
 #define PARSE_REQUIRED_ATTR(node, var, attr)                                                                    \
     const char *var = mxmlElementGetAttr(node, attr);                                                           \
     if (!var)                                                                                                   \
@@ -299,7 +298,7 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
         mxmlIndexDelete(file_repl_index);
 
         if (!is_rr_mystuff && !is_ctgpr_mystuff)
-        {    
+        {
             mxml_index_t *folder_repl_index = mxmlIndexNew(cur, "folder", NULL);
             for (mxml_node_t *folder = mxmlIndexEnum(folder_repl_index); folder != NULL; folder = mxmlIndexEnum(folder_repl_index))
             {
