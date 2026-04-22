@@ -1,0 +1,11 @@
+CompileFlags:
+  Add:
+    - "-I/opt/devkitpro/libogc/include"
+    - "-I/opt/devkitpro/libogc/include/**"
+    - "-I/opt/devkitpro/portlibs/ppc/include"
+    - "-I/opt/devkitpro/portlibs/wii/include"
+    - "-I/opt/devkitpro/devkitPPC/powerpc-eabi/include"
+    - "-I/home/timo/dev/rr-launcher/shared"
+    - "-I/home/timo/dev/rr-launcher/runtime-ext/vendor/bslug_include"
+    - "-DDEBUG"
+    - "-DPROFILE"

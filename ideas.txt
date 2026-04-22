@@ -1,0 +1,37 @@
+Paths:
+
+- <wiidisc> has an *optional* root attribute
+- If not set, then it defaults to "/riivolution"
+- every <patch> can also specify an *optional* root attribute, in which case it overrides the wiidisc root, or it can also inherit it
+
+Files:
+- Probably valid assumption (assert it): disc path should really begin with a /
+    - If it doesn't, then we want to patch a file in *any folder*! <file disc="x.szs" external="y.szs"> matches /a/x.szs, /a/a/x.szs, /a/a/a/x.szs... (needed for My Stuff!!)
+- TODO: here main.dol would need special handling!
+
+
+- allocate the PathTree for the disc_path
+- allocate the PathTree for the external_path
+- insert the `FileReplacement { disc_path, external_path, active_file: NULL }` into the dense_hash_set
+
+Folders:
+- Takes an *optional* disc
+- Takes a *required* external
+    - QUESTION: does this path actually need to be a folder? What happens if it isnt??? Or is it that if it's a file then any file within `disc` maps to this file??
+    - Maybe we can just avoid this altogether and assert against this..
+- Takes an optional recursive (default is true)
+
+For every file in `external` (must be a folder)
+    - Concatenate the disc and external path (lets call them `c_disc` and `c_external`)
+        - NB: careful of missing `disc` path! This should naturally work though, because concatenating "" + "file.szs" becomes "file.szs" and that is one of the special cases for <file> replacements where it does a filename search
+    - Check what type of file `c_external` is
+        - If it's a folder:
+            - If recursive, then repeat the loop for every file within this directory as well.
+            - If not recursive, then.. assert that this isnt possible?
+        - If it's a file, then basically treat this as if it was a <file disc=c_disc external=c_external>
+
+TODO:
+- do we want to make sure <id> is RMC?
+- dynamically allocate patches and stuff, don't be wasteful with 128 memory patches and don't limit to 1000 patches
+
+Current MEM1 Usage: 8172d160-81721b40 strings ~910 KB

@@ -21,6 +21,7 @@
 #define RRC_RIIVO_H
 
 #include "types.h"
+#include "path_tree.h"
 
 #define RRC_RIIVO_XML_PATH "RetroRewind6/xml/RetroRewind6.xml"
 
@@ -53,13 +54,20 @@ struct rrc_riivo_disc
     struct rrc_riivo_disc_replacement replacements[0];
 };
 
-struct rrc_riivo_file_patch {
-
+struct rrc_riivo_file_patch
+{
+    struct rrc_path_component *disc_path;
+    struct rrc_path_component *external_path;
+    void *active_file;
 };
 
-struct rrc_riivo_disc_v2 {
-    u32 count;
-    struct rrc_riivo_file_patch* file_replacements;
+struct rrc_riivo_disc_v2
+{
+    u32 filename_search_file_count;
+    struct rrc_riivo_file_patch *filename_search_file_replacements;
+
+    u32 absolute_file_count;
+    struct rrc_riivo_file_patch *absolute_file_replacements;
 };
 
 struct rrc_riivo_memory_patch

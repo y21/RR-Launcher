@@ -48,7 +48,7 @@ static const char **bump_alloc_string_array(u32 *arena, int count)
 
 bool should_register_patch_mystuff_aware(bool is_rr_mystuff, bool is_ctgpr_mystuff, bool is_rr_music_mystuff, bool is_ctgp_music_mystuff, int my_stuff_setting)
 {
-    if(!is_rr_mystuff && !is_ctgpr_mystuff && !is_rr_music_mystuff && !is_ctgp_music_mystuff)
+    if (!is_rr_mystuff && !is_ctgpr_mystuff && !is_rr_music_mystuff && !is_ctgp_music_mystuff)
         return true;
 
     if (is_rr_mystuff && my_stuff_setting == RRC_SETTINGSFILE_MY_STUFF_RR)
@@ -182,9 +182,81 @@ const char **rrc_riivo_patch_loader_get_entries_in_replaced_folder(u32 *arena, c
     return entries;
 }
 
+struct rrc_result rrc_riivo_patch_loader_parse_v2(struct rrc_settingsfile *settings, u32 *mem1, struct parse_riivo_output *out)
+{
+#define PARSE_REQUIRED_ATTR(node, var, attr)                                                                    \
+    const char *var = mxmlElementGetAttr(node, attr);                                                           \
+    if (!var)                                                                                                   \
+    {                                                                                                           \
+        return rrc_result_create_error_corrupted_rr_xml("missing " attr " attribute on " #node " replacement"); \
+    }
+
+    FILE *xml_file = fopen(RRC_RIIVO_XML_PATH, "r");
+    if (!xml_file)
+    {
+        return rrc_result_create_error_errno(errno, "Failed to open " RRC_RIIVO_XML_PATH);
+    }
+
+    mxml_node_t *xml_top = mxmlLoadFile(NULL, xml_file, NULL);
+
+    // First things first, determine which `<patch>`es are active based on the active `<option>`s.
+    const char *active_patches[MAX_ENABLED_SETTINGS];
+    int active_patches_count = 0;
+
+    mxml_index_t *options_index = mxmlIndexNew(xml_top, "option", NULL);
+    if (!options_index)
+    {
+        return rrc_result_create_error_corrupted_rr_xml("Failed to find <option> in the xml");
+    }
+
+    TRY(rrc_patch_loader_append_patches_for_option(xml_top, options_index, "My Stuff", settings->my_stuff, active_patches, &active_patches_count));
+    // Just always enable the pack, there is no setting for this.
+    TRY(rrc_patch_loader_append_patches_for_option(xml_top, options_index, "Pack", RRC_SETTINGSFILE_PACK_ENABLED_VALUE, active_patches, &active_patches_count));
+    // NOTE: we purposefully leave `RRSave` (for separate savegame) disabled because we manually implement it rather than handling <savegame>
+
+    // Now that we have the list of `active_patches`, iterate active `<patch>`es in the XML
+    for (mxml_node_t *cur = mxmlFindElement(xml_top, xml_top, "patch", NULL, NULL, MXML_DESCEND_FIRST); cur != NULL; cur = mxmlGetNextSibling(cur))
+    {
+        if (mxmlGetType(cur) != MXML_ELEMENT)
+            continue;
+
+        if (strcmp(mxmlGetElement(cur), "patch") != 0)
+            continue;
+
+        // We have a <patch> element. Check if the id is an enabled setting, then process any of its contained <file> and <folder> elements.
+        const char *elem_id = mxmlElementGetAttr(cur, "id");
+        bool enabled = false;
+        for (int i = 0; i < active_patches_count; i++)
+        {
+            if (strcmp(active_patches[i], elem_id) == 0)
+            {
+                enabled = true;
+                break;
+            }
+        }
+        if (!enabled)
+            continue;
+
+        //////////////////////////
+        //////// File replacements
+        //////////////////////////
+        mxml_index_t *file_repl_index = mxmlIndexNew(cur, "file", NULL);
+        for (mxml_node_t *file = mxmlIndexEnum(file_repl_index); file != NULL; file = mxmlIndexEnum(file_repl_index))
+        {
+            PARSE_REQUIRED_ATTR(file, disc_path_mxml, "disc");
+            PARSE_REQUIRED_ATTR(file, external_path_mxml, "external");
+        }
+    }
+
+#undef PARSE_REQUIRED_ATTR
+}
+static int handle_file_replacement(const char *disc_path_mxml, const char *external_path_mxml)
+{
+    return 6;
+}
+
 struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings, u32 *mem1, u32 *mem2, struct parse_riivo_output *out)
 {
-
 
 #define PARSE_REQUIRED_ATTR(node, var, attr)                                                                    \
     const char *var = mxmlElementGetAttr(node, attr);                                                           \
